@@ -2,7 +2,8 @@
 
 const state = {
   dir: null,
-  layouts: [],
+  children: new Map(),
+  expanded: new Set(),
   currentPath: null,
   currentLayout: null,
   dirty: false,
@@ -75,6 +76,8 @@ async function renderPreview() {
 
 async function setLayoutsDir(dir) {
   state.dir = dir
+  state.children = new Map()
+  state.expanded = new Set()
   el.dirPath.textContent = dir
   el.dirPath.classList.remove('muted')
   el.newLayout.disabled = false
@@ -98,23 +101,66 @@ async function restoreLastDir() {
 
 async function refreshList() {
   if (!state.dir) return
-  state.layouts = await window.wt.list(state.dir)
+  state.children.set(state.dir, await window.wt.list(state.dir))
+  for (const dir of Array.from(state.expanded)) {
+    try {
+      state.children.set(dir, await window.wt.list(dir))
+    } catch (_) {
+      state.expanded.delete(dir)
+      state.children.delete(dir)
+    }
+  }
   renderList()
 }
 
 function renderList() {
   el.layoutList.innerHTML = ''
-  for (const entry of state.layouts) {
+  const roots = state.children.get(state.dir) || []
+  renderEntries(roots, el.layoutList, 0)
+}
+
+function renderEntries(entries, parentUl, depth) {
+  for (const entry of entries) {
     const li = document.createElement('li')
-    li.textContent = entry.name || entry.file
-    if (entry.error) {
-      li.classList.add('error')
-      li.title = entry.error
+    li.style.paddingLeft = `${10 + depth * 14}px`
+    if (entry.type === 'dir') {
+      const isOpen = state.expanded.has(entry.path)
+      li.classList.add('dir-item')
+      li.textContent = `${isOpen ? '▾' : '▸'} ${entry.name}`
+      li.addEventListener('click', (e) => { e.stopPropagation(); toggleDir(entry.path) })
+      parentUl.appendChild(li)
+      if (isOpen) {
+        const kids = state.children.get(entry.path) || []
+        renderEntries(kids, parentUl, depth + 1)
+      }
+    } else {
+      li.classList.add('file-item')
+      li.textContent = entry.name || entry.file
+      if (entry.error) { li.classList.add('error'); li.title = entry.error }
+      if (entry.path === state.currentPath) li.classList.add('active')
+      li.addEventListener('click', () => selectLayout(entry.path))
+      parentUl.appendChild(li)
     }
-    if (entry.path === state.currentPath) li.classList.add('active')
-    li.addEventListener('click', () => selectLayout(entry.path))
-    el.layoutList.appendChild(li)
   }
+}
+
+async function toggleDir(dirPath) {
+  if (state.expanded.has(dirPath)) {
+    state.expanded.delete(dirPath)
+    renderList()
+    return
+  }
+  state.expanded.add(dirPath)
+  if (!state.children.has(dirPath)) {
+    try {
+      state.children.set(dirPath, await window.wt.list(dirPath))
+    } catch (err) {
+      state.expanded.delete(dirPath)
+      toast('Failed to read folder: ' + err.message, 'error')
+      return
+    }
+  }
+  renderList()
 }
 
 async function selectLayout(filePath) {

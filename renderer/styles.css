@@ -73,6 +73,8 @@ button.small { padding: 2px 8px; font-size: 12px; }
 .layout-list li:hover { background: #2a2a2a; }
 .layout-list li.active { background: #2c5a9e; color: #fff; }
 .layout-list li.error { color: #f08080; }
+.layout-list li.dir-item { color: #c8a46a; font-weight: 600; }
+.layout-list li.dir-item:hover { background: #2a2a2a; }
 
 .editor {
   flex: 1;

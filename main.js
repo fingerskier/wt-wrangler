@@ -64,19 +64,26 @@ ipcMain.handle('layouts:pickDir', async () => {
 ipcMain.handle('layouts:list', async (_e, dirPath) => {
   if (!dirPath) return []
   const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  const dirs = entries
+    .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+    .map(d => d.name)
+    .sort()
   const files = entries
     .filter(d => d.isFile() && d.name.toLowerCase().endsWith('.json'))
     .map(d => d.name)
     .sort()
   const out = []
+  for (const name of dirs) {
+    out.push({ type: 'dir', name, path: path.join(dirPath, name) })
+  }
   for (const name of files) {
     const full = path.join(dirPath, name)
     try {
       const raw = await fs.readFile(full, 'utf8')
       const data = JSON.parse(raw)
-      out.push({ file: name, path: full, name: data.name || name.replace(/\.json$/i, '') })
+      out.push({ type: 'file', file: name, path: full, name: data.name || name.replace(/\.json$/i, '') })
     } catch (err) {
-      out.push({ file: name, path: full, name, error: String(err.message || err) })
+      out.push({ type: 'file', file: name, path: full, name, error: String(err.message || err) })
     }
   }
   return out
