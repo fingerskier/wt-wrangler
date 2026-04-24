@@ -11,4 +11,5 @@ contextBridge.exposeInMainWorld('wt', {
   remove: file => ipcRenderer.invoke('layouts:delete', file),
   run: layout => ipcRenderer.invoke('layouts:run', layout),
   preview: layout => ipcRenderer.invoke('layouts:preview', layout),
+  profiles: () => ipcRenderer.invoke('profiles:list'),
 })

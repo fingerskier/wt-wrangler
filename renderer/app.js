@@ -6,6 +6,8 @@ const state = {
   currentPath: null,
   currentLayout: null,
   dirty: false,
+  profiles: [],
+  profileSource: null,
 }
 
 const el = {
@@ -191,6 +193,7 @@ function renderEditor() {
   })
 
   el.editor.appendChild(node)
+  renderProfileOptions()
   renderPreview()
 }
 
@@ -336,8 +339,41 @@ async function deleteCurrent() {
   }
 }
 
+async function loadProfiles() {
+  try {
+    const res = await window.wt.profiles()
+    state.profiles = Array.isArray(res.profiles) ? res.profiles : []
+    state.profileSource = res.source || null
+    renderProfileOptions()
+  } catch (err) {
+    console.warn('profile discovery failed:', err)
+  }
+}
+
+function renderProfileOptions() {
+  const dl = document.getElementById('profileOptions')
+  if (!dl) return
+  dl.innerHTML = ''
+  const seen = new Set()
+  const known = [...state.profiles]
+  if (state.currentLayout) {
+    for (const tab of state.currentLayout.tabs) {
+      if (tab.profile) known.push(tab.profile)
+      for (const pane of tab.panes) if (pane.profile) known.push(pane.profile)
+    }
+  }
+  for (const name of known) {
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    const opt = document.createElement('option')
+    opt.value = name
+    dl.appendChild(opt)
+  }
+}
+
 el.pickDir.addEventListener('click', pickDir)
 el.newLayout.addEventListener('click', newLayoutAction)
+loadProfiles()
 
 window.addEventListener('beforeunload', (e) => {
   if (state.dirty) { e.preventDefault(); e.returnValue = '' }

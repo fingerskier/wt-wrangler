@@ -5,6 +5,7 @@ const path = require('node:path')
 const fs = require('node:fs/promises')
 const { spawn } = require('node:child_process')
 const { buildWtArgv, buildWtCommand } = require('./src/wtCommand')
+const { discoverProfiles } = require('./src/wtProfiles')
 
 let mainWindow = null
 
@@ -99,4 +100,8 @@ ipcMain.handle('layouts:run', async (_e, layout) => {
 
 ipcMain.handle('layouts:preview', async (_e, layout) => {
   return buildWtCommand(layout)
+})
+
+ipcMain.handle('profiles:list', async () => {
+  return discoverProfiles()
 })
