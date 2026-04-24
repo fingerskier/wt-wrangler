@@ -91,6 +91,8 @@ button.small { padding: 2px 8px; font-size: 12px; }
 .layout-list li.dir-item { color: #c8a46a; font-weight: 600; }
 .layout-list li.dir-item:hover { background: #2a2a2a; }
 .layout-list li.dir-item.selected { background: #3a2f15; outline: 1px solid #c8a46a; }
+.layout-list li.root-item { color: #9ac8ff; font-weight: 700; margin-bottom: 4px; }
+.layout-list li.root-item.selected { background: #1f2f44; outline: 1px solid #4a78a8; }
 .layout-list li.dragging { opacity: 0.5; }
 .layout-list li.drop-target { background: #224028; outline: 1px dashed #5fa46f; }
 #dirPath { cursor: pointer; }

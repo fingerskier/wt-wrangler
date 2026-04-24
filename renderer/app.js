@@ -144,6 +144,22 @@ async function refreshList() {
 
 function renderList() {
   el.layoutList.innerHTML = ''
+  if (state.dir) {
+    const rootLi = document.createElement('li')
+    rootLi.classList.add('dir-item', 'root-item')
+    if (state.saveDir === state.dir) rootLi.classList.add('selected')
+    const basename = state.dir.split(/[\\/]/).filter(Boolean).pop() || state.dir
+    rootLi.textContent = `⌂ ${basename}`
+    rootLi.title = 'Click to save to root folder'
+    rootLi.addEventListener('click', (e) => {
+      e.stopPropagation()
+      state.saveDir = state.dir
+      updateSaveDirDisplay()
+      renderList()
+    })
+    attachDropTarget(rootLi, state.dir)
+    el.layoutList.appendChild(rootLi)
+  }
   const roots = state.children.get(state.dir) || []
   renderEntries(roots, el.layoutList, 0)
 }
