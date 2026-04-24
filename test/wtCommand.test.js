@@ -59,35 +59,6 @@ test('buildWtArgv repeats -w token before every subcommand', () => {
   assert.ok(argv.includes('-H'))
 })
 
-test('composeShellCommand wraps pwsh post-run with Start-Sleep', () => {
-  const out = composeShellCommand({
-    profile: 'pwsh',
-    command: 'npm run dev',
-    postCommand: 'git status',
-    postDelay: 5,
-  })
-  assert.equal(out, 'powershell -NoExit -Command "npm run dev; Start-Sleep -Seconds 5; git status"')
-})
-
-test('composeShellCommand wraps cmd post-run with timeout', () => {
-  const out = composeShellCommand({
-    profile: 'cmd',
-    command: 'build.bat',
-    postCommand: 'dir',
-    postDelay: 2,
-  })
-  assert.equal(out, 'cmd /k build.bat & timeout /t 2 /nobreak >nul & dir')
-})
-
-test('composeShellCommand wraps bash post-run with sleep', () => {
-  const out = composeShellCommand({
-    profile: 'Ubuntu',
-    command: 'npm start',
-    postCommand: 'echo done',
-  })
-  assert.equal(out, 'bash -i -c "npm start; sleep 3; echo done; exec bash"')
-})
-
 test('composeShellCommand wraps bare cmd builtin so dir-style commands launch', () => {
   const out = composeShellCommand({ profile: 'cmd', command: 'dir' })
   assert.equal(out, 'cmd /k dir')
@@ -98,7 +69,12 @@ test('composeShellCommand wraps bare pwsh command through powershell -NoExit', (
   assert.equal(out, 'powershell -NoExit -Command "Get-Process"')
 })
 
-test('composeShellCommand returns empty when neither command nor post', () => {
+test('composeShellCommand wraps bash command keeping session interactive', () => {
+  const out = composeShellCommand({ profile: 'Ubuntu', command: 'npm start' })
+  assert.equal(out, 'bash -i -c "npm start; exec bash"')
+})
+
+test('composeShellCommand returns empty when no command', () => {
   assert.equal(composeShellCommand({ profile: 'cmd' }), '')
 })
 

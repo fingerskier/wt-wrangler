@@ -34,9 +34,7 @@
           "split": "down",
           "size": 0.4,
           "profile": "pwsh",
-          "command": "npm run logs",
-          "postCommand": "Clear-Host",
-          "postDelay": 2
+          "command": "npm run logs"
         }
       ]
     }

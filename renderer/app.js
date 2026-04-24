@@ -288,8 +288,6 @@ function normalizePane(pane) {
     profile: pane.profile || '',
     dir: pane.dir || '',
     command: pane.command || '',
-    postCommand: pane.postCommand || '',
-    postDelay: typeof pane.postDelay === 'number' ? pane.postDelay : undefined,
   }
 }
 
@@ -479,8 +477,7 @@ function renderPane(pane, paneIdx, tab, isLast) {
   splitSel.value = pane.split || 'right'
   splitSel.addEventListener('change', () => { pane.split = splitSel.value; markDirty(); renderEditor() })
   bindNumber('size')
-  bindText('profile'); bindText('dir'); bindText('command'); bindText('postCommand')
-  bindNumber('postDelay')
+  bindText('profile'); bindText('dir'); bindText('command')
   attachDirPicker(card, pane, 'dir')
 
   const splitRightBtn = card.querySelector('[data-action="splitRight"]')
@@ -530,8 +527,6 @@ function serializeLayout() {
         if (pane.profile) p.profile = pane.profile
         if (pane.dir) p.dir = pane.dir
         if (pane.command) p.command = pane.command
-        if (pane.postCommand) p.postCommand = pane.postCommand
-        if (Number.isFinite(pane.postDelay)) p.postDelay = pane.postDelay
         return p
       }),
     })),

@@ -29,23 +29,8 @@ function wrapThroughShell(kind, script) {
 
 function composeShellCommand(pane) {
   const main = pane.command || ''
-  const post = pane.postCommand || ''
-  if (!main && !post) return ''
-  const kind = profileKind(pane.profile)
-  if (!post) return wrapThroughShell(kind, main)
-  const delay = Number.isFinite(pane.postDelay) ? pane.postDelay : 3
-  let inner
-  if (kind === 'cmd') {
-    const prefix = main ? `${main} & ` : ''
-    inner = `${prefix}timeout /t ${delay} /nobreak >nul & ${post}`
-  } else if (kind === 'bash') {
-    const prefix = main ? `${main}; ` : ''
-    inner = `${prefix}sleep ${delay}; ${post}`
-  } else {
-    const prefix = main ? `${main}; ` : ''
-    inner = `${prefix}Start-Sleep -Seconds ${delay}; ${post}`
-  }
-  return wrapThroughShell(kind, inner)
+  if (!main) return ''
+  return wrapThroughShell(profileKind(pane.profile), main)
 }
 
 function buildPaneArgs(pane, isFirstInTab, target) {
@@ -75,8 +60,6 @@ function buildTab(tab, target) {
     profile: panes[0].profile || tab.profile,
     dir: panes[0].dir || tab.dir,
     command: panes[0].command,
-    postCommand: panes[0].postCommand,
-    postDelay: panes[0].postDelay,
   }
   const segments = [buildPaneArgs(firstPane, true, target)]
   for (let i = 1; i < panes.length; i++) {

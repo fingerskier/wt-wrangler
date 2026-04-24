@@ -26,7 +26,6 @@ gitignored — the `prepackage` / `premake` npm hooks rebuild them from the PNG 
 * Open a directory containing the layout JSON files
 * Layouts can be _edited_ or _run_
 * A layout may contain startup commands
-* A layout may have post-run commands that are injected [after a time]
 * The editor will give a rough GUI showing the layout panes, names[inputs], and commands/command-sequences
 * Layout panes can be split horizontally or vertically (as is in Terminal itself via Alt+... commands)
 
