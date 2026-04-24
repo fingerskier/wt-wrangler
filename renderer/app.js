@@ -13,6 +13,10 @@ const state = {
   profileSource: null,
 }
 
+const history = window.History.create()
+const snapshotLayout = () => JSON.parse(JSON.stringify(state.currentLayout))
+let suspendHistory = false
+
 const el = {
   pickDir: document.getElementById('pickDir'),
   dirPath: document.getElementById('dirPath'),
@@ -76,10 +80,35 @@ function emptyLayout() {
   }
 }
 
-function markDirty() {
+function markDirty(opts) {
   state.dirty = true
+  if (!suspendHistory && state.currentLayout) {
+    const coalesce = !(opts && opts.structural)
+    window.History.push(history, snapshotLayout(), { coalesce })
+  }
+  updateUndoRedoButtons()
   schedulePreview()
 }
+
+function updateUndoRedoButtons() {
+  const undoBtn = el.editor.querySelector('[data-action="undo"]')
+  const redoBtn = el.editor.querySelector('[data-action="redo"]')
+  if (undoBtn) undoBtn.disabled = !window.History.canUndo(history)
+  if (redoBtn) redoBtn.disabled = !window.History.canRedo(history)
+}
+
+function applyHistorySnapshot(snap) {
+  if (!snap) return
+  suspendHistory = true
+  state.currentLayout = JSON.parse(JSON.stringify(snap))
+  clampTabIdx()
+  state.dirty = true
+  renderEditor()
+  suspendHistory = false
+}
+
+function undoAction() { applyHistorySnapshot(window.History.undo(history)) }
+function redoAction() { applyHistorySnapshot(window.History.redo(history)) }
 
 let previewTimer = null
 function schedulePreview() {
@@ -266,6 +295,7 @@ async function selectLayout(filePath) {
     state.currentLayout = normalizeLayout(layout)
     state.currentTabIdx = 0
     state.dirty = false
+    window.History.reset(history, snapshotLayout())
     renderList()
     renderEditor()
   } catch (err) {
@@ -311,6 +341,7 @@ function newLayoutAction() {
   state.currentLayout = emptyLayout()
   state.currentTabIdx = 0
   state.dirty = true
+  window.History.reset(history, snapshotLayout())
   renderList()
   renderEditor()
 }
@@ -332,7 +363,9 @@ function renderEditor() {
   nameInput.addEventListener('input', () => { state.currentLayout.name = nameInput.value; markDirty() })
   windowInput.addEventListener('input', () => { state.currentLayout.window = windowInput.value; markDirty() })
 
-  node.querySelector('[data-action="save"]').addEventListener('click', saveCurrent)
+  node.querySelector('[data-action="undo"]').addEventListener('click', undoAction)
+  node.querySelector('[data-action="redo"]').addEventListener('click', redoAction)
+  node.querySelector('[data-action="save"]').addEventListener('click', () => saveCurrent())
   node.querySelector('[data-action="run"]').addEventListener('click', runCurrent)
   node.querySelector('[data-action="delete"]').addEventListener('click', deleteCurrent)
 
@@ -346,6 +379,7 @@ function renderEditor() {
   el.editor.appendChild(node)
   renderProfileOptions()
   renderPreview()
+  updateUndoRedoButtons()
 }
 
 function clampTabIdx() {
@@ -372,7 +406,7 @@ function renderTabbar(host) {
       e.stopPropagation()
       if (state.currentLayout.tabs.length <= 1) { toast('Must keep at least one tab', 'error'); return }
       state.currentLayout.tabs.splice(idx, 1)
-      markDirty()
+      markDirty({ structural: true })
       renderEditor()
     })
     host.appendChild(frag)
@@ -384,7 +418,7 @@ function renderTabbar(host) {
   addBtn.addEventListener('click', () => {
     state.currentLayout.tabs.push(normalizeTab({ title: `Tab ${state.currentLayout.tabs.length + 1}` }))
     state.currentTabIdx = state.currentLayout.tabs.length - 1
-    markDirty()
+    markDirty({ structural: true })
     renderEditor()
   })
   host.appendChild(addBtn)
@@ -483,7 +517,7 @@ function renderPane(pane, paneIdx, tab, isLast) {
   }
   const splitSel = card.querySelector('[data-field="split"]')
   splitSel.value = pane.split || 'right'
-  splitSel.addEventListener('change', () => { pane.split = splitSel.value; markDirty(); renderEditor() })
+  splitSel.addEventListener('change', () => { pane.split = splitSel.value; markDirty({ structural: true }); renderEditor() })
   bindNumber('size')
   bindText('profile'); bindText('dir'); bindText('command')
   attachDirPicker(card, pane, 'dir')
@@ -496,7 +530,7 @@ function renderPane(pane, paneIdx, tab, isLast) {
       return
     }
     tab.panes.push(normalizePane({ split: dir, profile: pane.profile, dir: pane.dir }))
-    markDirty()
+    markDirty({ structural: true })
     renderEditor()
   }
   splitRightBtn.addEventListener('click', () => doSplit('right'))
@@ -511,7 +545,7 @@ function renderPane(pane, paneIdx, tab, isLast) {
   card.querySelector('[data-action="removePane"]').addEventListener('click', () => {
     if (tab.panes.length <= 1) { toast('Must keep at least one pane', 'error'); return }
     tab.panes.splice(paneIdx, 1)
-    markDirty()
+    markDirty({ structural: true })
     renderEditor()
   })
   return card
@@ -541,14 +575,15 @@ function serializeLayout() {
   return out
 }
 
-async function saveCurrent() {
-  if (!state.currentLayout) return
+async function saveCurrent(opts) {
+  if (!state.currentLayout) return false
+  const silent = opts && opts.silent
   const serialized = serializeLayout()
   try {
     if (state.currentPath) {
       await window.wt.save(state.currentPath, serialized)
     } else {
-      if (!state.dir) { toast('Open a folder first', 'error'); return }
+      if (!state.dir) { toast('Open a folder first', 'error'); return false }
       const target = state.saveDir || state.dir
       const saved = await window.wt.saveNew(target, serialized.name, serialized)
       state.currentPath = saved
@@ -556,15 +591,21 @@ async function saveCurrent() {
     }
     state.dirty = false
     await refreshList()
-    toast('Saved', 'success')
+    if (!silent) toast('Saved', 'success')
+    return true
   } catch (err) {
     toast('Save failed: ' + err.message, 'error')
+    return false
   }
 }
 
 async function runCurrent() {
   if (!state.currentLayout) return
   try {
+    if (state.dirty && state.currentPath) {
+      const ok = await saveCurrent({ silent: true })
+      if (!ok) return
+    }
     const serialized = serializeLayout()
     await window.wt.run(serialized)
     toast('Launching Windows Terminal…', 'success')
@@ -667,6 +708,23 @@ el.dirPath.addEventListener('drop', async (e) => {
 })
 loadProfiles()
 restoreLastDir()
+
+window.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey
+  if (!mod) return
+  const k = e.key.toLowerCase()
+  const tag = (e.target && e.target.tagName) || ''
+  if (k === 'z' && !e.shiftKey) {
+    if (!state.currentLayout) return
+    e.preventDefault(); undoAction()
+  } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+    if (!state.currentLayout) return
+    e.preventDefault(); redoAction()
+  } else if (k === 's' && !e.shiftKey && tag !== 'TEXTAREA') {
+    if (!state.currentLayout) return
+    e.preventDefault(); saveCurrent()
+  }
+})
 
 window.addEventListener('beforeunload', (e) => {
   if (state.dirty) { e.preventDefault(); e.returnValue = '' }

@@ -13,7 +13,7 @@
     "premake": "npm run build-icons",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "test": "node --test test/wtCommand.test.js test/wtProfiles.test.js test/config.test.js"
+    "test": "node --test test/wtCommand.test.js test/wtProfiles.test.js test/config.test.js test/layouts.test.js test/history.test.js"
   },
   "author": "Matt Currier",
   "license": "MIT",

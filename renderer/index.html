@@ -35,6 +35,8 @@
           <label>Name <input data-field="name" type="text" /></label>
           <label>Window <input data-field="window" type="text" /></label>
           <div class="editor-actions">
+            <button data-action="undo" type="button" title="Undo (Ctrl+Z)">↶</button>
+            <button data-action="redo" type="button" title="Redo (Ctrl+Y)">↷</button>
             <button data-action="save" type="button" class="primary">Save</button>
             <button data-action="run" type="button" class="success">Run</button>
             <button data-action="delete" type="button" class="danger">Delete</button>
@@ -101,6 +103,7 @@
 
     <div id="toast" class="toast hidden"></div>
 
+    <script src="history.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
