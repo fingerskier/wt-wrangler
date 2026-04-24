@@ -191,11 +191,17 @@ button.small { padding: 2px 7px; font-size: 11px; letter-spacing: 0.04em; }
 /* ─── sidebar ──────────────────────────────────────────────── */
 .sidebar {
   width: 252px;
-  background: var(--plate-0);
+  background:
+    linear-gradient(145deg,
+      rgba(221,226,234,0.06) 0%,
+      rgba(221,226,234,0.015) 32%,
+      rgba(0,0,0,0) 60%,
+      rgba(221,226,234,0.035) 100%),
+    linear-gradient(180deg, #1b1e23 0%, var(--plate-0) 55%, #171a1e 100%);
   border-right: 1px solid var(--seam);
   overflow-y: auto;
   padding: 12px 10px 16px;
-  box-shadow: inset -1px 0 0 rgba(255,255,255,0.015);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.04);
 }
 .sidebar h2 {
   font-size: 10px;
@@ -276,6 +282,14 @@ button.small { padding: 2px 7px; font-size: 11px; letter-spacing: 0.04em; }
   overflow-y: auto;
   padding: 20px 28px 32px;
   position: relative;
+  background:
+    radial-gradient(ellipse at 30% 0%, rgba(221,226,234,0.055), transparent 55%),
+    linear-gradient(180deg,
+      rgba(221,226,234,0.04) 0%,
+      rgba(221,226,234,0.015) 30%,
+      rgba(221,226,234,0.025) 100%),
+    var(--plate-1);
+  box-shadow: inset 1px 0 0 rgba(221,226,234,0.04);
 }
 .editor::before {
   /* faint corner crosshair — workshop registration mark */
@@ -499,7 +513,12 @@ select {
 .pane-slot > .pane-split { flex: 1; }
 
 .pane-card {
-  background: var(--plate-2);
+  background:
+    linear-gradient(180deg,
+      rgba(208,123,74,0.18) 0%,
+      rgba(208,123,74,0.08) 45%,
+      rgba(208,123,74,0.12) 100%),
+    var(--plate-3);
   border: 1px solid var(--seam-soft);
   border-left-width: 3px;
   border-radius: 2px;
@@ -509,7 +528,7 @@ select {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025), 0 1px 0 rgba(0,0,0,0.3);
+  box-shadow: inset 0 1px 0 rgba(232,166,100,0.08), 0 1px 0 rgba(0,0,0,0.35);
   animation: card-in 180ms ease-out both;
 }
 @keyframes card-in {
