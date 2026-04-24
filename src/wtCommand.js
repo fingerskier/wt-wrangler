@@ -71,12 +71,16 @@ function buildTab(tab) {
   return segments.join(' ; ')
 }
 
+function resolveWindowTarget(layout) {
+  const name = typeof layout.window === 'string' ? layout.window.trim() : ''
+  return name || 'new'
+}
+
 function buildWtCommand(layout) {
   if (!layout || !Array.isArray(layout.tabs) || !layout.tabs.length) {
     throw new Error('layout must have at least one tab')
   }
-  const head = ['wt']
-  if (layout.window) head.push('-w', quoteArg(layout.window))
+  const head = ['wt', '-w', quoteArg(resolveWindowTarget(layout))]
   const tabSegments = layout.tabs.map(buildTab)
   return [head.join(' '), tabSegments.join(' ; ')].join(' ')
 }
@@ -85,8 +89,7 @@ function buildWtArgv(layout) {
   if (!layout || !Array.isArray(layout.tabs) || !layout.tabs.length) {
     throw new Error('layout must have at least one tab')
   }
-  const argv = []
-  if (layout.window) argv.push('-w', layout.window)
+  const argv = ['-w', resolveWindowTarget(layout)]
   layout.tabs.forEach((tab, tabIdx) => {
     if (tabIdx > 0) argv.push(';')
     const panes = Array.isArray(tab.panes) && tab.panes.length
@@ -115,4 +118,4 @@ function buildWtArgv(layout) {
   return argv
 }
 
-module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg }
+module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg, resolveWindowTarget }

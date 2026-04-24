@@ -83,3 +83,26 @@ test('composeShellCommand wraps bash post-run with sleep', () => {
 test('buildWtCommand throws on empty layout', () => {
   assert.throws(() => buildWtCommand({}), /at least one tab/)
 })
+
+test('buildWtCommand defaults to -w new when no window name', () => {
+  const cmd = buildWtCommand({
+    name: 'orphan',
+    tabs: [{ title: 'One', profile: 'pwsh', panes: [{ profile: 'pwsh', command: 'echo hi' }] }],
+  })
+  assert.ok(cmd.startsWith('wt -w new '), cmd)
+})
+
+test('buildWtArgv defaults to -w new when no window name', () => {
+  const argv = buildWtArgv({
+    tabs: [{ title: 'One', profile: 'pwsh', panes: [{ profile: 'pwsh', command: 'echo hi' }] }],
+  })
+  assert.deepEqual(argv.slice(0, 2), ['-w', 'new'])
+})
+
+test('whitespace-only window name falls back to new', () => {
+  const cmd = buildWtCommand({
+    window: '   ',
+    tabs: [{ title: 'x', panes: [{ profile: 'pwsh', command: 'a' }] }],
+  })
+  assert.ok(cmd.startsWith('wt -w new '), cmd)
+})
