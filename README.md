@@ -1,9 +1,16 @@
 # wt-wrangler
-Windows Terminal layouts builder/runner
+Windows Terminal layouts builder/runner (Electron)
+
+## Install & run
+```
+npm install
+npm start        # launches the Electron GUI
+npm test         # runs the command-builder unit tests
+```
 
 ## Features
 * Create and edit terminal layouts as JSON files
-* Load a layout using Windows Terminal
+* Load a layout using Windows Terminal (spawns `wt.exe`)
 
 ## Interface
 * Open a directory containing the layout JSON files

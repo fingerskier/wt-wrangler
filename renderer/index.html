@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+    <title>wt-wrangler</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">wt-wrangler</div>
+      <div class="dir-row">
+        <button id="pickDir" type="button">Open Folder…</button>
+        <span id="dirPath" class="muted">(no folder)</span>
+      </div>
+      <div class="spacer"></div>
+      <button id="newLayout" type="button" disabled>New Layout</button>
+    </header>
+
+    <main class="app">
+      <aside class="sidebar">
+        <h2>Layouts</h2>
+        <ul id="layoutList" class="layout-list"></ul>
+      </aside>
+
+      <section class="editor" id="editor">
+        <div class="empty">Open a folder of layout JSON files, or create a new one.</div>
+      </section>
+    </main>
+
+    <template id="tpl-editor">
+      <div class="editor-inner">
+        <div class="editor-head">
+          <label>Name <input data-field="name" type="text" /></label>
+          <label>Window <input data-field="window" type="text" /></label>
+          <div class="editor-actions">
+            <button data-action="addTab" type="button">+ Tab</button>
+            <button data-action="save" type="button" class="primary">Save</button>
+            <button data-action="run" type="button" class="success">Run</button>
+            <button data-action="delete" type="button" class="danger">Delete</button>
+          </div>
+        </div>
+        <div class="tabs" data-tabs></div>
+        <details class="preview">
+          <summary>Command preview</summary>
+          <pre data-preview></pre>
+        </details>
+      </div>
+    </template>
+
+    <template id="tpl-tab">
+      <div class="tab-card" data-tab>
+        <div class="tab-head">
+          <label>Title <input data-field="title" type="text" /></label>
+          <label>Profile <input data-field="profile" type="text" placeholder="pwsh" /></label>
+          <label>Dir <input data-field="dir" type="text" placeholder="C:\path" /></label>
+          <button data-action="addPane" type="button">+ Pane</button>
+          <button data-action="removeTab" type="button" class="danger">×</button>
+        </div>
+        <div class="panes" data-panes></div>
+      </div>
+    </template>
+
+    <template id="tpl-pane">
+      <div class="pane-card" data-pane>
+        <div class="pane-head">
+          <span class="pane-label" data-pane-label></span>
+          <button data-action="removePane" type="button" class="danger small">×</button>
+        </div>
+        <div class="pane-body">
+          <label data-split-only>Split
+            <select data-field="split">
+              <option value="right">right</option>
+              <option value="down">down</option>
+              <option value="left">left</option>
+              <option value="up">up</option>
+            </select>
+          </label>
+          <label data-split-only>Size <input data-field="size" type="number" step="0.05" min="0.05" max="0.95" /></label>
+          <label>Profile <input data-field="profile" type="text" /></label>
+          <label>Dir <input data-field="dir" type="text" /></label>
+          <label class="wide">Command <input data-field="command" type="text" /></label>
+          <label class="wide">Post-run command <input data-field="postCommand" type="text" /></label>
+          <label>Post delay (s) <input data-field="postDelay" type="number" min="0" step="1" /></label>
+        </div>
+      </div>
+    </template>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

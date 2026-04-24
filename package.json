@@ -1,0 +1,15 @@
+{
+  "name": "wt-wrangler",
+  "version": "0.1.0",
+  "description": "Windows Terminal layouts builder/runner",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test"
+  },
+  "author": "Matt Currier",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
