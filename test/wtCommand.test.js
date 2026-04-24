@@ -32,10 +32,10 @@ const readmeLayout = {
 test('buildWtCommand produces wt invocation with window, tabs and splits', () => {
   const cmd = buildWtCommand(readmeLayout)
   assert.ok(cmd.startsWith('wt -w dev new-tab '), cmd)
-  assert.match(cmd, /-w dev new-tab --title App -p pwsh -d C:\\dev\\my-app npm run dev/)
-  assert.match(cmd, /-w dev split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app npm test/)
-  assert.match(cmd, /-w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server npm run server/)
-  assert.match(cmd, /-w dev split-pane -H --size 0\.4 -p pwsh npm run logs/)
+  assert.match(cmd, /-w dev new-tab --title App -p pwsh -d C:\\dev\\my-app powershell -NoExit -Command "npm run dev"/)
+  assert.match(cmd, /-w dev split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app cmd \/k npm test/)
+  assert.match(cmd, /-w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server powershell -NoExit -Command "npm run server"/)
+  assert.match(cmd, /-w dev split-pane -H --size 0\.4 -p pwsh powershell -NoExit -Command "npm run logs"/)
   const tabSeps = cmd.split(' ; ').length - 1
   assert.equal(tabSeps, 3, `expected 3 " ; " separators, got ${tabSeps}: ${cmd}`)
 })
@@ -66,7 +66,7 @@ test('composeShellCommand wraps pwsh post-run with Start-Sleep', () => {
     postCommand: 'git status',
     postDelay: 5,
   })
-  assert.equal(out, 'npm run dev; Start-Sleep -Seconds 5; git status')
+  assert.equal(out, 'powershell -NoExit -Command "npm run dev; Start-Sleep -Seconds 5; git status"')
 })
 
 test('composeShellCommand wraps cmd post-run with timeout', () => {
@@ -76,7 +76,7 @@ test('composeShellCommand wraps cmd post-run with timeout', () => {
     postCommand: 'dir',
     postDelay: 2,
   })
-  assert.equal(out, 'build.bat & timeout /t 2 /nobreak >nul & dir')
+  assert.equal(out, 'cmd /k build.bat & timeout /t 2 /nobreak >nul & dir')
 })
 
 test('composeShellCommand wraps bash post-run with sleep', () => {
@@ -85,7 +85,21 @@ test('composeShellCommand wraps bash post-run with sleep', () => {
     command: 'npm start',
     postCommand: 'echo done',
   })
-  assert.equal(out, 'npm start; sleep 3; echo done')
+  assert.equal(out, 'bash -i -c "npm start; sleep 3; echo done; exec bash"')
+})
+
+test('composeShellCommand wraps bare cmd builtin so dir-style commands launch', () => {
+  const out = composeShellCommand({ profile: 'cmd', command: 'dir' })
+  assert.equal(out, 'cmd /k dir')
+})
+
+test('composeShellCommand wraps bare pwsh command through powershell -NoExit', () => {
+  const out = composeShellCommand({ profile: 'pwsh', command: 'Get-Process' })
+  assert.equal(out, 'powershell -NoExit -Command "Get-Process"')
+})
+
+test('composeShellCommand returns empty when neither command nor post', () => {
+  assert.equal(composeShellCommand({ profile: 'cmd' }), '')
 })
 
 test('buildWtCommand throws on empty layout', () => {

@@ -14,24 +14,38 @@ function quoteArg(value) {
   return `"${str.replace(/"/g, '\\"')}"`
 }
 
+function profileKind(profile) {
+  const p = (profile || '').toLowerCase()
+  if (p === 'cmd' || p === 'command prompt') return 'cmd'
+  if (p.includes('bash') || p.includes('wsl') || p.includes('ubuntu')) return 'bash'
+  return 'pwsh'
+}
+
+function wrapThroughShell(kind, script) {
+  if (kind === 'cmd') return `cmd /k ${script}`
+  if (kind === 'bash') return `bash -i -c "${script.replace(/"/g, '\\"')}; exec bash"`
+  return `powershell -NoExit -Command "${script.replace(/"/g, '\\"')}"`
+}
+
 function composeShellCommand(pane) {
   const main = pane.command || ''
   const post = pane.postCommand || ''
-  if (!post) return main
+  if (!main && !post) return ''
+  const kind = profileKind(pane.profile)
+  if (!post) return wrapThroughShell(kind, main)
   const delay = Number.isFinite(pane.postDelay) ? pane.postDelay : 3
-  const profile = (pane.profile || '').toLowerCase()
-  const isCmd = profile === 'cmd' || profile === 'command prompt'
-  const isBash = profile.includes('bash') || profile.includes('wsl') || profile.includes('ubuntu')
-  if (isCmd) {
+  let inner
+  if (kind === 'cmd') {
     const prefix = main ? `${main} & ` : ''
-    return `${prefix}timeout /t ${delay} /nobreak >nul & ${post}`
-  }
-  if (isBash) {
+    inner = `${prefix}timeout /t ${delay} /nobreak >nul & ${post}`
+  } else if (kind === 'bash') {
     const prefix = main ? `${main}; ` : ''
-    return `${prefix}sleep ${delay}; ${post}`
+    inner = `${prefix}sleep ${delay}; ${post}`
+  } else {
+    const prefix = main ? `${main}; ` : ''
+    inner = `${prefix}Start-Sleep -Seconds ${delay}; ${post}`
   }
-  const prefix = main ? `${main}; ` : ''
-  return `${prefix}Start-Sleep -Seconds ${delay}; ${post}`
+  return wrapThroughShell(kind, inner)
 }
 
 function buildPaneArgs(pane, isFirstInTab, target) {
