@@ -7,6 +7,7 @@ const state = {
   expanded: new Set(),
   currentPath: null,
   currentLayout: null,
+  currentTabIdx: 0,
   dirty: false,
   profiles: [],
   profileSource: null,
@@ -49,7 +50,8 @@ function updateSaveDirDisplay() {
 
 const templates = {
   editor: document.getElementById('tpl-editor'),
-  tab: document.getElementById('tpl-tab'),
+  tabbarItem: document.getElementById('tpl-tabbar-item'),
+  tabView: document.getElementById('tpl-tab-view'),
   pane: document.getElementById('tpl-pane'),
 }
 
@@ -248,6 +250,7 @@ async function selectLayout(filePath) {
     const layout = await window.wt.read(filePath)
     state.currentPath = filePath
     state.currentLayout = normalizeLayout(layout)
+    state.currentTabIdx = 0
     state.dirty = false
     renderList()
     renderEditor()
@@ -294,6 +297,7 @@ function newLayoutAction() {
   if (state.dirty && !confirm('Discard unsaved changes?')) return
   state.currentPath = null
   state.currentLayout = emptyLayout()
+  state.currentTabIdx = 0
   state.dirty = true
   renderList()
   renderEditor()
@@ -316,57 +320,142 @@ function renderEditor() {
   nameInput.addEventListener('input', () => { state.currentLayout.name = nameInput.value; markDirty() })
   windowInput.addEventListener('input', () => { state.currentLayout.window = windowInput.value; markDirty() })
 
-  node.querySelector('[data-action="addTab"]').addEventListener('click', () => {
-    state.currentLayout.tabs.push(normalizeTab({ title: `Tab ${state.currentLayout.tabs.length + 1}` }))
-    markDirty()
-    renderEditor()
-  })
   node.querySelector('[data-action="save"]').addEventListener('click', saveCurrent)
   node.querySelector('[data-action="run"]').addEventListener('click', runCurrent)
   node.querySelector('[data-action="delete"]').addEventListener('click', deleteCurrent)
 
-  const tabsHost = node.querySelector('[data-tabs]')
-  state.currentLayout.tabs.forEach((tab, tabIdx) => {
-    tabsHost.appendChild(renderTab(tab, tabIdx))
-  })
+  const tabbarHost = node.querySelector('[data-tabbar]')
+  const tabViewHost = node.querySelector('[data-tab-view]')
+  clampTabIdx()
+  renderTabbar(tabbarHost)
+  const activeTab = state.currentLayout.tabs[state.currentTabIdx]
+  if (activeTab) tabViewHost.appendChild(renderTabView(activeTab, state.currentTabIdx))
 
   el.editor.appendChild(node)
   renderProfileOptions()
   renderPreview()
 }
 
-function renderTab(tab, tabIdx) {
-  const node = templates.tab.content.cloneNode(true)
-  const card = node.querySelector('[data-tab]')
-  const bind = (field) => {
-    const input = card.querySelector(`[data-field="${field}"]`)
-    input.value = tab[field] || ''
-    input.addEventListener('input', () => { tab[field] = input.value; markDirty() })
-  }
-  bind('title'); bind('profile'); bind('dir')
-  attachDirPicker(card, tab, 'dir')
-  card.querySelector('[data-action="addPane"]').addEventListener('click', () => {
-    tab.panes.push(normalizePane({ split: 'right', profile: tab.profile, dir: tab.dir }))
-    markDirty()
-    renderEditor()
-  })
-  card.querySelector('[data-action="removeTab"]').addEventListener('click', () => {
-    if (state.currentLayout.tabs.length <= 1) { toast('Must keep at least one tab', 'error'); return }
-    state.currentLayout.tabs.splice(tabIdx, 1)
-    markDirty()
-    renderEditor()
-  })
-  const panesHost = card.querySelector('[data-panes]')
-  tab.panes.forEach((pane, paneIdx) => {
-    panesHost.appendChild(renderPane(pane, paneIdx, tab))
-  })
-  return node
+function clampTabIdx() {
+  const n = state.currentLayout.tabs.length
+  if (state.currentTabIdx >= n) state.currentTabIdx = Math.max(0, n - 1)
+  if (state.currentTabIdx < 0) state.currentTabIdx = 0
 }
 
-function renderPane(pane, paneIdx, tab) {
-  const node = templates.pane.content.cloneNode(true)
-  const card = node.querySelector('[data-pane]')
-  card.querySelector('[data-pane-label]').textContent = paneIdx === 0 ? `Pane ${paneIdx + 1} (root)` : `Pane ${paneIdx + 1} (split)`
+function renderTabbar(host) {
+  host.innerHTML = ''
+  state.currentLayout.tabs.forEach((tab, idx) => {
+    const frag = templates.tabbarItem.content.cloneNode(true)
+    const btn = frag.querySelector('.tabbar-item')
+    const title = frag.querySelector('[data-tab-title]')
+    title.textContent = tab.title || `Tab ${idx + 1}`
+    if (idx === state.currentTabIdx) btn.classList.add('active')
+    btn.addEventListener('click', (e) => {
+      if (e.target.closest('[data-action="removeTab"]')) return
+      state.currentTabIdx = idx
+      renderEditor()
+    })
+    frag.querySelector('[data-action="removeTab"]').addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (state.currentLayout.tabs.length <= 1) { toast('Must keep at least one tab', 'error'); return }
+      state.currentLayout.tabs.splice(idx, 1)
+      markDirty()
+      renderEditor()
+    })
+    host.appendChild(frag)
+  })
+  const addBtn = document.createElement('button')
+  addBtn.type = 'button'
+  addBtn.className = 'tabbar-add'
+  addBtn.textContent = '+ Tab'
+  addBtn.addEventListener('click', () => {
+    state.currentLayout.tabs.push(normalizeTab({ title: `Tab ${state.currentLayout.tabs.length + 1}` }))
+    state.currentTabIdx = state.currentLayout.tabs.length - 1
+    markDirty()
+    renderEditor()
+  })
+  host.appendChild(addBtn)
+}
+
+function renderTabView(tab) {
+  const frag = templates.tabView.content.cloneNode(true)
+  const root = frag.querySelector('.tab-view-inner')
+  const bind = (field) => {
+    const input = root.querySelector(`[data-field="${field}"]`)
+    input.value = tab[field] || ''
+    input.addEventListener('input', () => {
+      tab[field] = input.value
+      if (field === 'title') {
+        const title = el.editor.querySelectorAll('.tabbar-item')[state.currentTabIdx]?.querySelector('[data-tab-title]')
+        if (title) title.textContent = input.value || `Tab ${state.currentTabIdx + 1}`
+      }
+      markDirty()
+    })
+  }
+  bind('title'); bind('profile'); bind('dir')
+  attachDirPicker(root, tab, 'dir')
+
+  const treeHost = root.querySelector('[data-pane-tree]')
+  const tree = buildPaneTree(tab.panes)
+  if (tree) treeHost.appendChild(renderPaneNode(tree, tab))
+  return frag
+}
+
+function buildPaneTree(panes) {
+  if (!panes.length) return null
+  let root = { kind: 'leaf', paneIdx: 0 }
+  let focused = root
+  const parents = new Map()
+  for (let i = 1; i < panes.length; i++) {
+    const p = panes[i]
+    const axis = (p.split === 'down' || p.split === 'up') ? 'h' : 'v'
+    const rawSize = Number.isFinite(p.size) ? p.size : 0.5
+    const size = Math.min(0.95, Math.max(0.05, rawSize))
+    const invert = p.split === 'left' || p.split === 'up'
+    const newLeaf = { kind: 'leaf', paneIdx: i }
+    const split = { kind: 'split', axis, size, invert, children: invert ? [newLeaf, focused] : [focused, newLeaf] }
+    const parent = parents.get(focused)
+    if (parent) {
+      const ix = parent.children.indexOf(focused)
+      parent.children[ix] = split
+      parents.set(split, parent)
+    } else {
+      root = split
+    }
+    parents.set(focused, split)
+    parents.set(newLeaf, split)
+    focused = newLeaf
+  }
+  return root
+}
+
+function renderPaneNode(node, tab) {
+  if (node.kind === 'leaf') {
+    const isLast = node.paneIdx === tab.panes.length - 1
+    return renderPane(tab.panes[node.paneIdx], node.paneIdx, tab, isLast)
+  }
+  const container = document.createElement('div')
+  container.className = `pane-split axis-${node.axis}`
+  const [a, b] = node.children
+  const flexA = node.invert ? node.size : 1 - node.size
+  const flexB = node.invert ? 1 - node.size : node.size
+  const slotA = document.createElement('div')
+  slotA.className = 'pane-slot'
+  slotA.style.flex = String(flexA)
+  slotA.appendChild(renderPaneNode(a, tab))
+  const slotB = document.createElement('div')
+  slotB.className = 'pane-slot'
+  slotB.style.flex = String(flexB)
+  slotB.appendChild(renderPaneNode(b, tab))
+  container.appendChild(slotA)
+  container.appendChild(slotB)
+  return container
+}
+
+function renderPane(pane, paneIdx, tab, isLast) {
+  const frag = templates.pane.content.cloneNode(true)
+  const card = frag.querySelector('.pane-card')
+  card.querySelector('[data-pane-label]').textContent = paneIdx === 0 ? `Pane 1 (root)` : `Pane ${paneIdx + 1}`
   if (paneIdx === 0) {
     card.querySelectorAll('[data-split-only]').forEach(n => n.style.display = 'none')
   }
@@ -386,18 +475,39 @@ function renderPane(pane, paneIdx, tab) {
   }
   const splitSel = card.querySelector('[data-field="split"]')
   splitSel.value = pane.split || 'right'
-  splitSel.addEventListener('change', () => { pane.split = splitSel.value; markDirty() })
+  splitSel.addEventListener('change', () => { pane.split = splitSel.value; markDirty(); renderEditor() })
   bindNumber('size')
   bindText('profile'); bindText('dir'); bindText('command'); bindText('postCommand')
   bindNumber('postDelay')
   attachDirPicker(card, pane, 'dir')
+
+  const splitRightBtn = card.querySelector('[data-action="splitRight"]')
+  const splitDownBtn = card.querySelector('[data-action="splitDown"]')
+  const doSplit = (dir) => {
+    if (!isLast) {
+      toast('wt splits the focused (last-added) pane — split from the last pane', 'error')
+      return
+    }
+    tab.panes.push(normalizePane({ split: dir, profile: pane.profile || tab.profile, dir: pane.dir || tab.dir }))
+    markDirty()
+    renderEditor()
+  }
+  splitRightBtn.addEventListener('click', () => doSplit('right'))
+  splitDownBtn.addEventListener('click', () => doSplit('down'))
+  if (!isLast) {
+    splitRightBtn.disabled = true
+    splitDownBtn.disabled = true
+    splitRightBtn.title = 'Only the last pane can be split (wt CLI constraint)'
+    splitDownBtn.title = splitRightBtn.title
+  }
+
   card.querySelector('[data-action="removePane"]').addEventListener('click', () => {
     if (tab.panes.length <= 1) { toast('Must keep at least one pane', 'error'); return }
     tab.panes.splice(paneIdx, 1)
     markDirty()
     renderEditor()
   })
-  return node
+  return card
 }
 
 function serializeLayout() {

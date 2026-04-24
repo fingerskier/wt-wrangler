@@ -35,13 +35,13 @@
           <label>Name <input data-field="name" type="text" /></label>
           <label>Window <input data-field="window" type="text" /></label>
           <div class="editor-actions">
-            <button data-action="addTab" type="button">+ Tab</button>
             <button data-action="save" type="button" class="primary">Save</button>
             <button data-action="run" type="button" class="success">Run</button>
             <button data-action="delete" type="button" class="danger">Delete</button>
           </div>
         </div>
-        <div class="tabs" data-tabs></div>
+        <div class="tabbar" data-tabbar></div>
+        <div class="tab-view" data-tab-view></div>
         <details class="preview">
           <summary>Command preview</summary>
           <pre data-preview></pre>
@@ -49,8 +49,15 @@
       </div>
     </template>
 
-    <template id="tpl-tab">
-      <div class="tab-card" data-tab>
+    <template id="tpl-tabbar-item">
+      <button type="button" class="tabbar-item" data-tabbar-item>
+        <span class="tabbar-title" data-tab-title></span>
+        <span class="tabbar-close" data-action="removeTab" title="Remove tab">×</span>
+      </button>
+    </template>
+
+    <template id="tpl-tab-view">
+      <div class="tab-view-inner">
         <div class="tab-head">
           <label>Title <input data-field="title" type="text" /></label>
           <label>Profile <input data-field="profile" type="text" list="profileOptions" placeholder="pwsh" /></label>
@@ -60,10 +67,8 @@
               <button type="button" data-action="pickDir" title="Browse…">…</button>
             </span>
           </label>
-          <button data-action="addPane" type="button">+ Pane</button>
-          <button data-action="removeTab" type="button" class="danger">×</button>
         </div>
-        <div class="panes" data-panes></div>
+        <div class="pane-tree" data-pane-tree></div>
       </div>
     </template>
 
@@ -71,7 +76,11 @@
       <div class="pane-card" data-pane>
         <div class="pane-head">
           <span class="pane-label" data-pane-label></span>
-          <button data-action="removePane" type="button" class="danger small">×</button>
+          <div class="pane-actions">
+            <button data-action="splitRight" type="button" class="split-btn" title="Split → (new pane right)">│→</button>
+            <button data-action="splitDown" type="button" class="split-btn" title="Split ↓ (new pane below)">─↓</button>
+            <button data-action="removePane" type="button" class="danger small" title="Remove pane">×</button>
+          </div>
         </div>
         <div class="pane-body">
           <label data-split-only>Split
