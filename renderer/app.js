@@ -2,6 +2,7 @@
 
 const state = {
   dir: null,
+  saveDir: null,
   children: new Map(),
   expanded: new Set(),
   currentPath: null,
@@ -14,10 +15,36 @@ const state = {
 const el = {
   pickDir: document.getElementById('pickDir'),
   dirPath: document.getElementById('dirPath'),
+  saveHint: document.getElementById('saveHint'),
   newLayout: document.getElementById('newLayout'),
   layoutList: document.getElementById('layoutList'),
   editor: document.getElementById('editor'),
   toast: document.getElementById('toast'),
+}
+
+function dirnameOf(p) {
+  const i = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
+  return i >= 0 ? p.slice(0, i) : ''
+}
+
+function relOf(full) {
+  if (!state.dir) return full
+  if (full === state.dir) return ''
+  if (full.startsWith(state.dir)) {
+    const rest = full.slice(state.dir.length)
+    return rest.replace(/^[\\/]+/, '')
+  }
+  return full
+}
+
+function updateSaveDirDisplay() {
+  if (!state.saveDir || state.saveDir === state.dir) {
+    el.saveHint.classList.add('hidden')
+    el.saveHint.textContent = ''
+  } else {
+    el.saveHint.classList.remove('hidden')
+    el.saveHint.textContent = `save → ${relOf(state.saveDir)}`
+  }
 }
 
 const templates = {
@@ -76,11 +103,13 @@ async function renderPreview() {
 
 async function setLayoutsDir(dir) {
   state.dir = dir
+  state.saveDir = dir
   state.children = new Map()
   state.expanded = new Set()
   el.dirPath.textContent = dir
   el.dirPath.classList.remove('muted')
   el.newLayout.disabled = false
+  updateSaveDirDisplay()
   await refreshList()
 }
 
@@ -125,9 +154,13 @@ function renderEntries(entries, parentUl, depth) {
     li.style.paddingLeft = `${10 + depth * 14}px`
     if (entry.type === 'dir') {
       const isOpen = state.expanded.has(entry.path)
+      const isSelected = state.saveDir === entry.path
       li.classList.add('dir-item')
+      if (isSelected) li.classList.add('selected')
       li.textContent = `${isOpen ? '▾' : '▸'} ${entry.name}`
-      li.addEventListener('click', (e) => { e.stopPropagation(); toggleDir(entry.path) })
+      li.title = 'Click to select as save target'
+      li.addEventListener('click', (e) => { e.stopPropagation(); onDirClick(entry.path) })
+      attachDropTarget(li, entry.path)
       parentUl.appendChild(li)
       if (isOpen) {
         const kids = state.children.get(entry.path) || []
@@ -136,6 +169,13 @@ function renderEntries(entries, parentUl, depth) {
     } else {
       li.classList.add('file-item')
       li.textContent = entry.name || entry.file
+      li.draggable = true
+      li.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', entry.path)
+        li.classList.add('dragging')
+      })
+      li.addEventListener('dragend', () => li.classList.remove('dragging'))
       if (entry.error) { li.classList.add('error'); li.title = entry.error }
       if (entry.path === state.currentPath) li.classList.add('active')
       li.addEventListener('click', () => selectLayout(entry.path))
@@ -144,23 +184,62 @@ function renderEntries(entries, parentUl, depth) {
   }
 }
 
-async function toggleDir(dirPath) {
-  if (state.expanded.has(dirPath)) {
+async function onDirClick(dirPath) {
+  if (state.expanded.has(dirPath) && state.saveDir === dirPath) {
     state.expanded.delete(dirPath)
+    state.saveDir = state.dir
+    updateSaveDirDisplay()
     renderList()
     return
   }
-  state.expanded.add(dirPath)
-  if (!state.children.has(dirPath)) {
-    try {
-      state.children.set(dirPath, await window.wt.list(dirPath))
-    } catch (err) {
-      state.expanded.delete(dirPath)
-      toast('Failed to read folder: ' + err.message, 'error')
-      return
+  state.saveDir = dirPath
+  if (!state.expanded.has(dirPath)) {
+    state.expanded.add(dirPath)
+    if (!state.children.has(dirPath)) {
+      try {
+        state.children.set(dirPath, await window.wt.list(dirPath))
+      } catch (err) {
+        state.expanded.delete(dirPath)
+        state.saveDir = state.dir
+        updateSaveDirDisplay()
+        toast('Failed to read folder: ' + err.message, 'error')
+        return
+      }
     }
   }
+  updateSaveDirDisplay()
   renderList()
+}
+
+function attachDropTarget(li, destDir) {
+  li.addEventListener('dragover', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    li.classList.add('drop-target')
+  })
+  li.addEventListener('dragleave', () => li.classList.remove('drop-target'))
+  li.addEventListener('drop', async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    li.classList.remove('drop-target')
+    const src = e.dataTransfer.getData('text/plain')
+    if (!src) return
+    await moveLayout(src, destDir)
+  })
+}
+
+async function moveLayout(srcPath, destDir) {
+  if (dirnameOf(srcPath) === destDir) return
+  try {
+    const newPath = await window.wt.move(srcPath, destDir)
+    if (state.currentPath === srcPath) state.currentPath = newPath
+    if (destDir !== state.dir) state.expanded.add(destDir)
+    await refreshList()
+    toast('Moved', 'success')
+  } catch (err) {
+    toast('Move failed: ' + err.message, 'error')
+  }
 }
 
 async function selectLayout(filePath) {
@@ -357,8 +436,10 @@ async function saveCurrent() {
       await window.wt.save(state.currentPath, serialized)
     } else {
       if (!state.dir) { toast('Open a folder first', 'error'); return }
-      const saved = await window.wt.saveNew(state.dir, serialized.name, serialized)
+      const target = state.saveDir || state.dir
+      const saved = await window.wt.saveNew(target, serialized.name, serialized)
       state.currentPath = saved
+      if (target !== state.dir) state.expanded.add(target)
     }
     state.dirty = false
     await refreshList()
@@ -451,6 +532,27 @@ function renderProfileOptions() {
 
 el.pickDir.addEventListener('click', pickDir)
 el.newLayout.addEventListener('click', newLayoutAction)
+el.dirPath.addEventListener('click', () => {
+  if (!state.dir) return
+  state.saveDir = state.dir
+  updateSaveDirDisplay()
+  renderList()
+})
+el.dirPath.addEventListener('dragover', (e) => {
+  if (!state.dir) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  el.dirPath.classList.add('drop-target')
+})
+el.dirPath.addEventListener('dragleave', () => el.dirPath.classList.remove('drop-target'))
+el.dirPath.addEventListener('drop', async (e) => {
+  e.preventDefault()
+  el.dirPath.classList.remove('drop-target')
+  if (!state.dir) return
+  const src = e.dataTransfer.getData('text/plain')
+  if (!src) return
+  await moveLayout(src, state.dir)
+})
 loadProfiles()
 restoreLastDir()
 

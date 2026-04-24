@@ -75,6 +75,13 @@ button.small { padding: 2px 8px; font-size: 12px; }
 .layout-list li.error { color: #f08080; }
 .layout-list li.dir-item { color: #c8a46a; font-weight: 600; }
 .layout-list li.dir-item:hover { background: #2a2a2a; }
+.layout-list li.dir-item.selected { background: #3a2f15; outline: 1px solid #c8a46a; }
+.layout-list li.dragging { opacity: 0.5; }
+.layout-list li.drop-target { background: #224028; outline: 1px dashed #5fa46f; }
+#dirPath { cursor: pointer; }
+#dirPath.drop-target { background: #224028; outline: 1px dashed #5fa46f; padding: 2px 4px; border-radius: 3px; }
+.save-hint { color: #c8a46a; font-size: 11px; font-style: italic; }
+.save-hint.hidden { display: none; }
 
 .editor {
   flex: 1;
