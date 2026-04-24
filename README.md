@@ -20,8 +20,23 @@ npm test         # runs the command-builder unit tests
 * The editor will give a rough GUI showing the layout panes, names[inputs], and commands/command-sequences
 * Layout panes can be split horizontally or vertically (as is in Terminal itself via Alt+... commands)
 
+## How the wt command is built
+
+Building a chained `wt.exe` invocation has two non-obvious rules. Both are encoded in `src/wtCommand.js` and both matter for multi-tab layouts.
+
+1. **Repeat `-w <name>` on every subcommand.** `-w new` is a keyword that only scopes to the first subcommand; once a chained `;` appears, any later `new-tab` or `split-pane` that carries a commandline will spawn a separate window instead of attaching. Use a concrete name — either the layout's `window` field or an auto-generated `wtw-<timestamp>-<suffix>` — and emit `-w <name>` before every segment. The first subcommand creates the window by that name, the rest attach to it.
+
+2. **Wrap every pane command through the profile's shell.** `wt`'s commandline positional requires an *executable*. A bare shell builtin like `dir` or `ls` has no `.exe` to launch, so `wt` silently drops that chained subcommand — which looks like "only the first tab opens" whenever any later tab uses a builtin. wt-wrangler wraps every pane command through the profile's shell so builtins, aliases, and shell functions all launch, and the tab stays open for output:
+
+    | Profile                       | Wrap                                         |
+    | ----------------------------- | -------------------------------------------- |
+    | `cmd` / `Command Prompt`      | `cmd /k <cmd>`                               |
+    | `bash` / `wsl` / `ubuntu`     | `bash -i -c "<cmd>; exec bash"`              |
+    | `pwsh` / default / everything else | `powershell -NoExit -Command "<cmd>"`   |
+
+A third rule lives in `main.js`: the process is spawned as `spawn(cmdString, { shell: true, ... })`. `shell: true` is required so that cmd.exe tokenizes the literal `;` as its own argv element before it reaches `wt.exe`.
+
 ## Data Format
-**Need to add the command bits**
 ```json
 {
   "name": "dev-cockpit",
