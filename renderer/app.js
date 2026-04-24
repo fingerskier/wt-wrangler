@@ -73,14 +73,27 @@ async function renderPreview() {
   }
 }
 
-async function pickDir() {
-  const dir = await window.wt.pickDir()
-  if (!dir) return
+async function setLayoutsDir(dir) {
   state.dir = dir
   el.dirPath.textContent = dir
   el.dirPath.classList.remove('muted')
   el.newLayout.disabled = false
   await refreshList()
+}
+
+async function pickDir() {
+  const dir = await window.wt.pickDir()
+  if (!dir) return
+  await setLayoutsDir(dir)
+}
+
+async function restoreLastDir() {
+  try {
+    const cfg = await window.wt.configGet()
+    if (cfg && cfg.lastDir) await setLayoutsDir(cfg.lastDir)
+  } catch (err) {
+    console.warn('restore lastDir failed:', err)
+  }
 }
 
 async function refreshList() {
@@ -393,6 +406,7 @@ function renderProfileOptions() {
 el.pickDir.addEventListener('click', pickDir)
 el.newLayout.addEventListener('click', newLayoutAction)
 loadProfiles()
+restoreLastDir()
 
 window.addEventListener('beforeunload', (e) => {
   if (state.dirty) { e.preventDefault(); e.returnValue = '' }

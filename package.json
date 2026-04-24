@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/wtCommand.test.js test/wtProfiles.test.js"
+    "test": "node --test test/wtCommand.test.js test/wtProfiles.test.js test/config.test.js"
   },
   "author": "Matt Currier",
   "license": "MIT",

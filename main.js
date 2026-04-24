@@ -6,8 +6,10 @@ const fs = require('node:fs/promises')
 const { spawn } = require('node:child_process')
 const { buildWtArgv, buildWtCommand } = require('./src/wtCommand')
 const { discoverProfiles } = require('./src/wtProfiles')
+const { makeStore } = require('./src/config')
 
 let mainWindow = null
+let store = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,6 +29,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  store = makeStore(app.getPath('userData'))
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -38,12 +41,16 @@ app.on('window-all-closed', () => {
 })
 
 ipcMain.handle('layouts:pickDir', async () => {
+  const saved = await store.read()
   const res = await dialog.showOpenDialog(mainWindow, {
     title: 'Select layouts directory',
     properties: ['openDirectory', 'createDirectory'],
+    defaultPath: saved.lastDir || undefined,
   })
   if (res.canceled || !res.filePaths.length) return null
-  return res.filePaths[0]
+  const picked = res.filePaths[0]
+  await store.write({ lastDir: picked })
+  return picked
 })
 
 ipcMain.handle('layouts:list', async (_e, dirPath) => {
@@ -104,6 +111,25 @@ ipcMain.handle('layouts:preview', async (_e, layout) => {
 
 ipcMain.handle('profiles:list', async () => {
   return discoverProfiles()
+})
+
+ipcMain.handle('config:get', async () => {
+  const data = await store.read()
+  if (data.lastDir) {
+    try {
+      const stat = await require('node:fs/promises').stat(data.lastDir)
+      if (!stat.isDirectory()) data.lastDir = null
+    } catch (_) {
+      data.lastDir = null
+    }
+  }
+  return data
+})
+
+ipcMain.handle('config:set', async (_e, patch) => {
+  if (!patch || typeof patch !== 'object') return false
+  await store.write(patch)
+  return true
 })
 
 ipcMain.handle('dialog:pickDir', async (_e, defaultPath) => {

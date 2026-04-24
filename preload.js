@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('wt', {
   preview: layout => ipcRenderer.invoke('layouts:preview', layout),
   profiles: () => ipcRenderer.invoke('profiles:list'),
   pickAnyDir: defaultPath => ipcRenderer.invoke('dialog:pickDir', defaultPath),
+  configGet: () => ipcRenderer.invoke('config:get'),
+  configSet: patch => ipcRenderer.invoke('config:set', patch),
 })
