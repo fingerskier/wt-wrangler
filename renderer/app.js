@@ -70,8 +70,6 @@ function emptyLayout() {
     tabs: [
       {
         title: 'Tab 1',
-        profile: 'pwsh',
-        dir: '',
         panes: [{ profile: 'pwsh', dir: '', command: '' }],
       },
     ],
@@ -270,15 +268,15 @@ function normalizeLayout(layout) {
 }
 
 function normalizeTab(tab) {
-  const out = {
+  const panes = Array.isArray(tab.panes) && tab.panes.length
+    ? tab.panes.map(normalizePane)
+    : [normalizePane({})]
+  if (tab.profile && !panes[0].profile) panes[0].profile = tab.profile
+  if (tab.dir && !panes[0].dir) panes[0].dir = tab.dir
+  return {
     title: tab.title || '',
-    profile: tab.profile || '',
-    dir: tab.dir || '',
-    panes: Array.isArray(tab.panes) && tab.panes.length
-      ? tab.panes.map(normalizePane)
-      : [normalizePane({})],
+    panes,
   }
-  return out
 }
 
 function normalizePane(pane) {
@@ -379,20 +377,14 @@ function renderTabbar(host) {
 function renderTabView(tab) {
   const frag = templates.tabView.content.cloneNode(true)
   const root = frag.querySelector('.tab-view-inner')
-  const bind = (field) => {
-    const input = root.querySelector(`[data-field="${field}"]`)
-    input.value = tab[field] || ''
-    input.addEventListener('input', () => {
-      tab[field] = input.value
-      if (field === 'title') {
-        const title = el.editor.querySelectorAll('.tabbar-item')[state.currentTabIdx]?.querySelector('[data-tab-title]')
-        if (title) title.textContent = input.value || `Tab ${state.currentTabIdx + 1}`
-      }
-      markDirty()
-    })
-  }
-  bind('title'); bind('profile'); bind('dir')
-  attachDirPicker(root, tab, 'dir')
+  const titleInput = root.querySelector('[data-field="title"]')
+  titleInput.value = tab.title || ''
+  titleInput.addEventListener('input', () => {
+    tab.title = titleInput.value
+    const title = el.editor.querySelectorAll('.tabbar-item')[state.currentTabIdx]?.querySelector('[data-tab-title]')
+    if (title) title.textContent = titleInput.value || `Tab ${state.currentTabIdx + 1}`
+    markDirty()
+  })
 
   const treeHost = root.querySelector('[data-pane-tree]')
   const tree = buildPaneTree(tab.panes)
@@ -487,7 +479,7 @@ function renderPane(pane, paneIdx, tab, isLast) {
       toast('wt splits the focused (last-added) pane — split from the last pane', 'error')
       return
     }
-    tab.panes.push(normalizePane({ split: dir, profile: pane.profile || tab.profile, dir: pane.dir || tab.dir }))
+    tab.panes.push(normalizePane({ split: dir, profile: pane.profile, dir: pane.dir }))
     markDirty()
     renderEditor()
   }
@@ -516,8 +508,6 @@ function serializeLayout() {
     window: layout.window || undefined,
     tabs: layout.tabs.map(tab => ({
       title: tab.title || undefined,
-      profile: tab.profile || undefined,
-      dir: tab.dir || undefined,
       panes: tab.panes.map((pane, idx) => {
         const p = {}
         if (idx > 0) {
@@ -624,7 +614,6 @@ function renderProfileOptions() {
   const known = [...state.profiles]
   if (state.currentLayout) {
     for (const tab of state.currentLayout.tabs) {
-      if (tab.profile) known.push(tab.profile)
       for (const pane of tab.panes) if (pane.profile) known.push(pane.profile)
     }
   }

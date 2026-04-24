@@ -10,8 +10,6 @@ const readmeLayout = {
   tabs: [
     {
       title: 'App',
-      profile: 'pwsh',
-      dir: 'C:\\dev\\my-app',
       panes: [
         { profile: 'pwsh', dir: 'C:\\dev\\my-app', command: 'npm run dev' },
         { split: 'right', size: 0.35, profile: 'cmd', dir: 'C:\\dev\\my-app', command: 'npm test' },
@@ -19,10 +17,8 @@ const readmeLayout = {
     },
     {
       title: 'Server',
-      profile: 'pwsh',
-      dir: 'C:\\dev\\my-app\\server',
       panes: [
-        { profile: 'pwsh', command: 'npm run server' },
+        { profile: 'pwsh', dir: 'C:\\dev\\my-app\\server', command: 'npm run server' },
         { split: 'down', size: 0.4, profile: 'pwsh', command: 'npm run logs' },
       ],
     },

@@ -52,15 +52,8 @@ function buildPaneArgs(pane, isFirstInTab, target) {
 }
 
 function buildTab(tab, target) {
-  const panes = Array.isArray(tab.panes) && tab.panes.length
-    ? tab.panes
-    : [{ profile: tab.profile, dir: tab.dir, command: tab.command }]
-  const firstPane = {
-    title: tab.title,
-    profile: panes[0].profile || tab.profile,
-    dir: panes[0].dir || tab.dir,
-    command: panes[0].command,
-  }
+  const panes = Array.isArray(tab.panes) && tab.panes.length ? tab.panes : [{}]
+  const firstPane = { title: tab.title, ...panes[0] }
   const segments = [buildPaneArgs(firstPane, true, target)]
   for (let i = 1; i < panes.length; i++) {
     segments.push(buildPaneArgs(panes[i], false, target))
@@ -93,31 +86,24 @@ function buildWtArgv(layout) {
   }
   const target = resolveWindowTarget(layout)
   const argv = []
-  layout.tabs.forEach((tab, tabIdx) => {
-    const panes = Array.isArray(tab.panes) && tab.panes.length
-      ? tab.panes
-      : [{ profile: tab.profile, dir: tab.dir, command: tab.command }]
+  layout.tabs.forEach((tab) => {
+    const panes = Array.isArray(tab.panes) && tab.panes.length ? tab.panes : [{}]
     panes.forEach((pane, paneIdx) => {
       if (argv.length > 0) argv.push(';')
       argv.push('-w', target)
-      let profile = pane.profile
-      let dir = pane.dir
       if (paneIdx === 0) {
         argv.push('new-tab')
         if (tab.title) argv.push('--title', tab.title)
-        profile = profile || tab.profile
-        dir = dir || tab.dir
       } else {
         argv.push('split-pane')
         argv.push(SPLIT_FLAGS[pane.split] || '-V')
         if (Number.isFinite(pane.size)) argv.push('--size', String(pane.size))
       }
-      if (profile) argv.push('-p', profile)
-      if (dir) argv.push('-d', dir)
-      const shellCmd = composeShellCommand({ ...pane, profile })
+      if (pane.profile) argv.push('-p', pane.profile)
+      if (pane.dir) argv.push('-d', pane.dir)
+      const shellCmd = composeShellCommand(pane)
       if (shellCmd) argv.push(shellCmd)
     })
-    void tabIdx
   })
   return argv
 }
