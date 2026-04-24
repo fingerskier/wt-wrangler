@@ -105,3 +105,14 @@ ipcMain.handle('layouts:preview', async (_e, layout) => {
 ipcMain.handle('profiles:list', async () => {
   return discoverProfiles()
 })
+
+ipcMain.handle('dialog:pickDir', async (_e, defaultPath) => {
+  const opts = {
+    title: 'Select directory',
+    properties: ['openDirectory'],
+  }
+  if (defaultPath && typeof defaultPath === 'string') opts.defaultPath = defaultPath
+  const res = await dialog.showOpenDialog(mainWindow, opts)
+  if (res.canceled || !res.filePaths.length) return null
+  return res.filePaths[0]
+})

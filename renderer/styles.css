@@ -116,6 +116,25 @@ input[type="text"], input[type="number"], select {
 }
 input:focus, select:focus { outline: none; border-color: #5a8fd8; }
 
+.with-picker {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+}
+.with-picker input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+.with-picker button {
+  padding: 2px 8px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 14px;
+  line-height: 1;
+  min-width: 28px;
+}
+
 .tabs { display: flex; flex-direction: column; gap: 14px; }
 .tab-card {
   background: #222;

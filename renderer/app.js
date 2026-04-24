@@ -206,6 +206,7 @@ function renderTab(tab, tabIdx) {
     input.addEventListener('input', () => { tab[field] = input.value; markDirty() })
   }
   bind('title'); bind('profile'); bind('dir')
+  attachDirPicker(card, tab, 'dir')
   card.querySelector('[data-action="addPane"]').addEventListener('click', () => {
     tab.panes.push(normalizePane({ split: 'right', profile: tab.profile, dir: tab.dir }))
     markDirty()
@@ -251,6 +252,7 @@ function renderPane(pane, paneIdx, tab) {
   bindNumber('size')
   bindText('profile'); bindText('dir'); bindText('command'); bindText('postCommand')
   bindNumber('postDelay')
+  attachDirPicker(card, pane, 'dir')
   card.querySelector('[data-action="removePane"]').addEventListener('click', () => {
     if (tab.panes.length <= 1) { toast('Must keep at least one pane', 'error'); return }
     tab.panes.splice(paneIdx, 1)
@@ -337,6 +339,23 @@ async function deleteCurrent() {
   } catch (err) {
     toast('Delete failed: ' + err.message, 'error')
   }
+}
+
+function attachDirPicker(root, target, field) {
+  const input = root.querySelector(`[data-field="${field}"]`)
+  const btn = root.querySelector('[data-action="pickDir"]')
+  if (!input || !btn) return
+  btn.addEventListener('click', async () => {
+    try {
+      const selected = await window.wt.pickAnyDir(input.value || state.dir || undefined)
+      if (!selected) return
+      target[field] = selected
+      input.value = selected
+      markDirty()
+    } catch (err) {
+      toast('Picker failed: ' + err.message, 'error')
+    }
+  })
 }
 
 async function loadProfiles() {
