@@ -3,3 +3,7 @@ dist/
 out/
 *.log
 .DS_Store
+
+# Generated icon artifacts (built from asset/logo.png via scripts/build-icons.js)
+asset/logo.ico
+asset/logo-setup.gif

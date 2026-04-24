@@ -4,9 +4,19 @@ Windows Terminal layouts builder/runner (Electron)
 ## Install & run
 ```
 npm install
-npm start        # launches the Electron GUI
+npm start        # launches the Electron GUI (via electron-forge)
 npm test         # runs the command-builder unit tests
 ```
+
+## Packaging the installer
+```
+npm run build-icons   # regenerates asset/logo.ico + asset/logo-setup.gif from asset/logo.png
+npm run package       # produces out/Wrangler-win32-x64/
+npm run make          # produces out/make/squirrel.windows/x64/WranglerSetup.exe
+```
+App branding (name, window icon, taskbar icon, installer icon, Squirrel install banner) is
+derived from `asset/logo.png`. The derived `asset/logo.ico` and `asset/logo-setup.gif` are
+gitignored — the `prepackage` / `premake` npm hooks rebuild them from the PNG before Forge runs.
 
 ## Features
 * Create and edit terminal layouts as JSON files

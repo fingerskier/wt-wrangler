@@ -1,15 +1,31 @@
 {
   "name": "wt-wrangler",
+  "productName": "Wrangler",
   "version": "0.1.0",
   "description": "Windows Terminal layouts builder/runner",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "electron-forge start",
+    "start:plain": "electron .",
+    "build-icons": "node scripts/build-icons.js",
+    "prepackage": "npm run build-icons",
+    "package": "electron-forge package",
+    "premake": "npm run build-icons",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
     "test": "node --test test/wtCommand.test.js test/wtProfiles.test.js test/config.test.js"
   },
   "author": "Matt Currier",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.0.0"
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "electron": "^33.0.0",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
   }
 }

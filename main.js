@@ -1,5 +1,10 @@
 'use strict'
 
+if (require('electron-squirrel-startup')) {
+  require('electron').app.quit()
+  return
+}
+
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs/promises')
@@ -8,6 +13,8 @@ const { buildWtArgv, buildWtCommand } = require('./src/wtCommand')
 const { discoverProfiles } = require('./src/wtProfiles')
 const { makeStore } = require('./src/config')
 
+const APP_ICON = path.join(__dirname, 'asset', process.platform === 'win32' ? 'logo.ico' : 'logo.png')
+
 let mainWindow = null
 let store = null
 
@@ -15,7 +22,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'wt-wrangler',
+    title: 'Wrangler',
+    icon: APP_ICON,
     backgroundColor: '#1a1a1a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
