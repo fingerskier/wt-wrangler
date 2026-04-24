@@ -100,7 +100,7 @@ ipcMain.handle('layouts:delete', async (_e, filePath) => {
 ipcMain.handle('layouts:run', async (_e, layout) => {
   const argv = buildWtArgv(layout)
   const preview = buildWtCommand(layout)
-  const child = spawn('wt.exe', argv, { detached: true, stdio: 'ignore', shell: false })
+  const child = spawn(preview, { shell: true, detached: true, stdio: 'ignore', windowsHide: true })
   child.unref()
   return { argv, preview, pid: child.pid }
 })
