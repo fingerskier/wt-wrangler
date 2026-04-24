@@ -349,6 +349,7 @@ function renderTabbar(host) {
     const btn = frag.querySelector('.tabbar-item')
     const title = frag.querySelector('[data-tab-title]')
     title.textContent = tab.title || `Tab ${idx + 1}`
+    btn.classList.add(`color-${idx % 4}`)
     if (idx === state.currentTabIdx) btn.classList.add('active')
     btn.addEventListener('click', (e) => {
       if (e.target.closest('[data-action="removeTab"]')) return
@@ -455,6 +456,7 @@ function renderPaneNode(node, tab) {
 function renderPane(pane, paneIdx, tab, isLast) {
   const frag = templates.pane.content.cloneNode(true)
   const card = frag.querySelector('.pane-card')
+  card.classList.add(`color-${paneIdx % 4}`)
   card.querySelector('[data-pane-label]').textContent = paneIdx === 0 ? `Pane 1 (root)` : `Pane ${paneIdx + 1}`
   if (paneIdx === 0) {
     card.querySelectorAll('[data-split-only]').forEach(n => n.style.display = 'none')

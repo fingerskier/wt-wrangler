@@ -1,9 +1,24 @@
+:root {
+  --c1: #4fb3a7;
+  --c2: #e0a73c;
+  --c3: #d36c7a;
+  --c4: #8a7fd4;
+  --c1-soft: #1d3836;
+  --c2-soft: #3a2f15;
+  --c3-soft: #3a1f24;
+  --c4-soft: #2a2743;
+  --font-ui: 'Inter', 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', 'Courier New', monospace;
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.4;
   background: #1a1a1a;
-  color: #e6e6e6;
+  color: #e9e9e9;
+  -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -116,11 +131,11 @@ label.wide { flex: 1 1 280px; }
 input[type="text"], input[type="number"], select {
   background: #111;
   border: 1px solid #333;
-  color: #e6e6e6;
+  color: #e9e9e9;
   padding: 5px 7px;
   border-radius: 3px;
   font-size: 13px;
-  font-family: inherit;
+  font-family: var(--font-ui);
   min-width: 120px;
 }
 input:focus, select:focus { outline: none; border-color: #5a8fd8; }
@@ -159,10 +174,13 @@ input:focus, select:focus { outline: none; border-color: #5a8fd8; }
   padding: 6px 10px 6px 12px;
   background: #1d1d1d;
   border: 1px solid #2e2e2e;
+  border-top: 3px solid #2e2e2e;
   border-bottom: none;
   border-radius: 5px 5px 0 0;
   color: #aaa;
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   position: relative;
   top: 1px;
@@ -171,9 +189,16 @@ input:focus, select:focus { outline: none; border-color: #5a8fd8; }
 .tabbar-item.active {
   background: #2c2c2c;
   color: #fff;
-  border-color: #444;
   border-bottom: 1px solid #2c2c2c;
 }
+.tabbar-item.color-0 { border-top-color: var(--c1); }
+.tabbar-item.color-1 { border-top-color: var(--c2); }
+.tabbar-item.color-2 { border-top-color: var(--c3); }
+.tabbar-item.color-3 { border-top-color: var(--c4); }
+.tabbar-item.active.color-0 { border-color: var(--c1); border-bottom-color: #2c2c2c; box-shadow: inset 0 -2px 0 var(--c1-soft); }
+.tabbar-item.active.color-1 { border-color: var(--c2); border-bottom-color: #2c2c2c; box-shadow: inset 0 -2px 0 var(--c2-soft); }
+.tabbar-item.active.color-2 { border-color: var(--c3); border-bottom-color: #2c2c2c; box-shadow: inset 0 -2px 0 var(--c3-soft); }
+.tabbar-item.active.color-3 { border-color: var(--c4); border-bottom-color: #2c2c2c; box-shadow: inset 0 -2px 0 var(--c4-soft); }
 .tabbar-title { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabbar-close {
   color: #888;
@@ -239,6 +264,7 @@ input:focus, select:focus { outline: none; border-color: #5a8fd8; }
 .pane-card {
   background: #191919;
   border: 1px solid #2e2e2e;
+  border-left-width: 4px;
   border-radius: 4px;
   padding: 8px 10px;
   display: flex;
@@ -247,6 +273,14 @@ input:focus, select:focus { outline: none; border-color: #5a8fd8; }
   min-height: 0;
   overflow: auto;
 }
+.pane-card.color-0 { border-left-color: var(--c1); }
+.pane-card.color-1 { border-left-color: var(--c2); }
+.pane-card.color-2 { border-left-color: var(--c3); }
+.pane-card.color-3 { border-left-color: var(--c4); }
+.pane-card.color-0 .pane-label { color: var(--c1); }
+.pane-card.color-1 .pane-label { color: var(--c2); }
+.pane-card.color-2 .pane-label { color: var(--c3); }
+.pane-card.color-3 .pane-label { color: var(--c4); }
 .pane-head {
   display: flex;
   justify-content: space-between;
@@ -259,7 +293,7 @@ input:focus, select:focus { outline: none; border-color: #5a8fd8; }
 .split-btn {
   padding: 2px 6px;
   font-size: 11px;
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: var(--font-mono);
   background: #1f2f44;
   border-color: #325278;
   color: #9ac8ff;
@@ -290,6 +324,7 @@ input:focus, select:focus { outline: none; border-color: #5a8fd8; }
   background: #000;
   border-radius: 3px;
   color: #9ad;
+  font-family: var(--font-mono);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
