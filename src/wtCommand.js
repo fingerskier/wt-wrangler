@@ -34,8 +34,8 @@ function composeShellCommand(pane) {
   return `${prefix}Start-Sleep -Seconds ${delay}; ${post}`
 }
 
-function buildPaneArgs(pane, isFirstInTab) {
-  const parts = []
+function buildPaneArgs(pane, isFirstInTab, target) {
+  const parts = ['-w', quoteArg(target)]
   if (isFirstInTab) {
     parts.push('new-tab')
     if (pane.title) parts.push('--title', quoteArg(pane.title))
@@ -52,7 +52,7 @@ function buildPaneArgs(pane, isFirstInTab) {
   return parts.join(' ')
 }
 
-function buildTab(tab) {
+function buildTab(tab, target) {
   const panes = Array.isArray(tab.panes) && tab.panes.length
     ? tab.panes
     : [{ profile: tab.profile, dir: tab.dir, command: tab.command }]
@@ -64,38 +64,45 @@ function buildTab(tab) {
     postCommand: panes[0].postCommand,
     postDelay: panes[0].postDelay,
   }
-  const segments = [buildPaneArgs(firstPane, true)]
+  const segments = [buildPaneArgs(firstPane, true, target)]
   for (let i = 1; i < panes.length; i++) {
-    segments.push(buildPaneArgs(panes[i], false))
+    segments.push(buildPaneArgs(panes[i], false, target))
   }
   return segments.join(' ; ')
 }
 
+function generateUniqueWindowName() {
+  const suffix = Math.random().toString(36).slice(2, 8)
+  return `wtw-${Date.now()}-${suffix}`
+}
+
 function resolveWindowTarget(layout) {
   const name = typeof layout.window === 'string' ? layout.window.trim() : ''
-  return name || 'new'
+  return name || generateUniqueWindowName()
 }
 
 function buildWtCommand(layout) {
   if (!layout || !Array.isArray(layout.tabs) || !layout.tabs.length) {
     throw new Error('layout must have at least one tab')
   }
-  const head = ['wt', '-w', quoteArg(resolveWindowTarget(layout))]
-  const tabSegments = layout.tabs.map(buildTab)
-  return [head.join(' '), tabSegments.join(' ; ')].join(' ')
+  const target = resolveWindowTarget(layout)
+  const tabSegments = layout.tabs.map(tab => buildTab(tab, target))
+  return ['wt', tabSegments.join(' ; ')].join(' ')
 }
 
 function buildWtArgv(layout) {
   if (!layout || !Array.isArray(layout.tabs) || !layout.tabs.length) {
     throw new Error('layout must have at least one tab')
   }
-  const argv = ['-w', resolveWindowTarget(layout)]
+  const target = resolveWindowTarget(layout)
+  const argv = []
   layout.tabs.forEach((tab, tabIdx) => {
-    if (tabIdx > 0) argv.push(';')
     const panes = Array.isArray(tab.panes) && tab.panes.length
       ? tab.panes
       : [{ profile: tab.profile, dir: tab.dir, command: tab.command }]
     panes.forEach((pane, paneIdx) => {
+      if (argv.length > 0) argv.push(';')
+      argv.push('-w', target)
       let profile = pane.profile
       let dir = pane.dir
       if (paneIdx === 0) {
@@ -104,7 +111,6 @@ function buildWtArgv(layout) {
         profile = profile || tab.profile
         dir = dir || tab.dir
       } else {
-        argv.push(';')
         argv.push('split-pane')
         argv.push(SPLIT_FLAGS[pane.split] || '-V')
         if (Number.isFinite(pane.size)) argv.push('--size', String(pane.size))
@@ -114,6 +120,7 @@ function buildWtArgv(layout) {
       const shellCmd = composeShellCommand({ ...pane, profile })
       if (shellCmd) argv.push(shellCmd)
     })
+    void tabIdx
   })
   return argv
 }

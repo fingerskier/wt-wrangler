@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { buildWtCommand, buildWtArgv, composeShellCommand } = require('../src/wtCommand')
+const { buildWtCommand, buildWtArgv, composeShellCommand, resolveWindowTarget } = require('../src/wtCommand')
 
 const readmeLayout = {
   name: 'dev-cockpit',
@@ -31,20 +31,28 @@ const readmeLayout = {
 
 test('buildWtCommand produces wt invocation with window, tabs and splits', () => {
   const cmd = buildWtCommand(readmeLayout)
-  assert.ok(cmd.startsWith('wt -w dev '), cmd)
-  assert.match(cmd, /new-tab --title App -p pwsh -d C:\\dev\\my-app npm run dev/)
-  assert.match(cmd, /split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app npm test/)
-  assert.match(cmd, /new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server npm run server/)
-  assert.match(cmd, /split-pane -H --size 0\.4 -p pwsh npm run logs/)
+  assert.ok(cmd.startsWith('wt -w dev new-tab '), cmd)
+  assert.match(cmd, /-w dev new-tab --title App -p pwsh -d C:\\dev\\my-app npm run dev/)
+  assert.match(cmd, /-w dev split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app npm test/)
+  assert.match(cmd, /-w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server npm run server/)
+  assert.match(cmd, /-w dev split-pane -H --size 0\.4 -p pwsh npm run logs/)
   const tabSeps = cmd.split(' ; ').length - 1
   assert.equal(tabSeps, 3, `expected 3 " ; " separators, got ${tabSeps}: ${cmd}`)
 })
 
-test('buildWtArgv returns argv array with ; tokens between tabs and splits', () => {
+test('buildWtCommand repeats -w <name> on every subcommand segment', () => {
+  const cmd = buildWtCommand(readmeLayout)
+  const wCount = (cmd.match(/-w dev /g) || []).length
+  assert.equal(wCount, 4, `expected -w dev on all 4 segments, got ${wCount}: ${cmd}`)
+})
+
+test('buildWtArgv repeats -w token before every subcommand', () => {
   const argv = buildWtArgv(readmeLayout)
   assert.deepEqual(argv.slice(0, 2), ['-w', 'dev'])
   const semicolons = argv.filter(tok => tok === ';').length
   assert.equal(semicolons, 3)
+  const wFlags = argv.filter(tok => tok === '-w').length
+  assert.equal(wFlags, 4, `expected -w before each of 4 segments, got ${wFlags}`)
   assert.ok(argv.includes('new-tab'))
   assert.ok(argv.includes('split-pane'))
   assert.ok(argv.includes('-V'))
@@ -84,25 +92,38 @@ test('buildWtCommand throws on empty layout', () => {
   assert.throws(() => buildWtCommand({}), /at least one tab/)
 })
 
-test('buildWtCommand defaults to -w new when no window name', () => {
+test('buildWtCommand generates unique window name when none provided', () => {
   const cmd = buildWtCommand({
     name: 'orphan',
     tabs: [{ title: 'One', profile: 'pwsh', panes: [{ profile: 'pwsh', command: 'echo hi' }] }],
   })
-  assert.ok(cmd.startsWith('wt -w new '), cmd)
+  assert.match(cmd, /^wt -w wtw-\d+-[a-z0-9]+ new-tab /, cmd)
 })
 
-test('buildWtArgv defaults to -w new when no window name', () => {
+test('buildWtArgv generates unique window name when none provided', () => {
   const argv = buildWtArgv({
     tabs: [{ title: 'One', profile: 'pwsh', panes: [{ profile: 'pwsh', command: 'echo hi' }] }],
   })
-  assert.deepEqual(argv.slice(0, 2), ['-w', 'new'])
+  assert.equal(argv[0], '-w')
+  assert.match(argv[1], /^wtw-\d+-[a-z0-9]+$/)
 })
 
-test('whitespace-only window name falls back to new', () => {
+test('whitespace-only window name falls back to generated name', () => {
   const cmd = buildWtCommand({
     window: '   ',
     tabs: [{ title: 'x', panes: [{ profile: 'pwsh', command: 'a' }] }],
   })
-  assert.ok(cmd.startsWith('wt -w new '), cmd)
+  assert.match(cmd, /^wt -w wtw-\d+-[a-z0-9]+ new-tab /, cmd)
+})
+
+test('resolveWindowTarget returns trimmed layout.window when provided', () => {
+  assert.equal(resolveWindowTarget({ window: '  myWin  ' }), 'myWin')
+})
+
+test('resolveWindowTarget generates fresh name per call when empty', () => {
+  const a = resolveWindowTarget({})
+  const b = resolveWindowTarget({ window: '' })
+  assert.match(a, /^wtw-\d+-[a-z0-9]+$/)
+  assert.match(b, /^wtw-\d+-[a-z0-9]+$/)
+  assert.notEqual(a, b)
 })
