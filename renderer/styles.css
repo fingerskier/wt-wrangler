@@ -504,6 +504,7 @@ select {
 .pane-slot > .pane-split { flex: 1; }
 
 .pane-card {
+  position: relative;
   background:
     linear-gradient(180deg,
       rgba(208,123,74,0.18) 0%,
@@ -518,7 +519,7 @@ select {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   box-shadow: inset 0 1px 0 rgba(232,166,100,0.08), 0 1px 0 rgba(0,0,0,0.35);
   animation: card-in 180ms ease-out both;
 }
@@ -550,20 +551,41 @@ select {
 }
 .pane-actions { display: inline-flex; gap: 4px; }
 .split-btn {
-  padding: 2px 7px;
-  font-size: 11px;
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
   font-family: var(--font-mono);
   background: linear-gradient(180deg, var(--plate-3), var(--plate-2));
-  border-color: var(--seam);
+  border: 1px solid var(--seam);
   color: var(--platinum);
   min-width: 0;
   letter-spacing: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.45), inset 0 1px 0 rgba(232,166,100,0.08);
+  z-index: 2;
+}
+.split-btn[data-action="splitDown"] {
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.split-btn[data-action="splitRight"] {
+  right: 0;
+  top: 50%;
+  transform: translate(50%, -50%);
 }
 .split-btn:hover:not(:disabled) {
   background: linear-gradient(180deg, var(--platinum-soft), #22262c);
   border-color: var(--platinum);
   color: var(--ink);
 }
+.split-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .pane-body {
   display: flex;
   flex-wrap: wrap;
