@@ -418,6 +418,20 @@ select {
   border-bottom: 1px solid var(--plate-3);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 var(--plate-3);
 }
+.tabbar-item[draggable="true"] { cursor: grab; }
+.tabbar-item.tab-dragging { opacity: 0.45; cursor: grabbing; }
+.tabbar-item.tab-drop-active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--cobalt);
+  box-shadow: 0 0 6px var(--cobalt);
+  pointer-events: none;
+}
+.tabbar-item.tab-drop-active.side-before::before { left: -2px; }
+.tabbar-item.tab-drop-active.side-after::before { right: -2px; }
 .tabbar-item.color-0 { border-top-color: var(--copper); }
 .tabbar-item.color-1 { border-top-color: var(--brass); }
 .tabbar-item.color-2 { border-top-color: var(--steel); }

@@ -438,6 +438,7 @@ function renderTabbar(host) {
       markDirty({ structural: true })
       renderEditor()
     })
+    attachTabDnd(btn, idx)
     host.appendChild(frag)
   })
   const addBtn = document.createElement('button')
@@ -621,6 +622,71 @@ function renderPane(pane, paneIdx, tab, isLast) {
 }
 
 const DND_MIME = 'text/x-pane-idx'
+const TAB_DND_MIME = 'text/x-tab-idx'
+
+function clearTabDropZones() {
+  document.querySelectorAll('.tabbar-item.tab-drop-active').forEach(n => {
+    n.classList.remove('tab-drop-active', 'side-before', 'side-after')
+  })
+}
+
+function attachTabDnd(btn, idx) {
+  btn.dataset.tabIdx = String(idx)
+  btn.setAttribute('draggable', 'true')
+
+  btn.addEventListener('dragstart', (e) => {
+    if (isEditableTarget(e.target)) { e.preventDefault(); return }
+    e.dataTransfer.setData(TAB_DND_MIME, String(idx))
+    e.dataTransfer.effectAllowed = 'move'
+    btn.classList.add('tab-dragging')
+  })
+
+  btn.addEventListener('dragend', () => {
+    btn.classList.remove('tab-dragging')
+    clearTabDropZones()
+  })
+
+  btn.addEventListener('dragover', (e) => {
+    const types = e.dataTransfer && e.dataTransfer.types
+    if (!types || !Array.from(types).includes(TAB_DND_MIME)) return
+    if (btn.classList.contains('tab-dragging')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const r = btn.getBoundingClientRect()
+    const xFrac = (e.clientX - r.left) / r.width
+    const side = window.PaneTree.pickTabSide(xFrac)
+    btn.classList.add('tab-drop-active')
+    btn.classList.remove('side-before', 'side-after')
+    btn.classList.add(`side-${side}`)
+  })
+
+  btn.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget && btn.contains(e.relatedTarget)) return
+    btn.classList.remove('tab-drop-active', 'side-before', 'side-after')
+  })
+
+  btn.addEventListener('drop', (e) => {
+    const raw = e.dataTransfer.getData(TAB_DND_MIME)
+    if (raw === '') return
+    e.preventDefault()
+    clearTabDropZones()
+    const dragIdx = Number(raw)
+    if (!Number.isFinite(dragIdx)) return
+    const r = btn.getBoundingClientRect()
+    const xFrac = (e.clientX - r.left) / r.width
+    const side = window.PaneTree.pickTabSide(xFrac)
+    const tabs = state.currentLayout.tabs
+    const next = window.PaneTree.reorderTabsForDrop(tabs, dragIdx, idx, side)
+    if (!next) return
+    const activeTab = tabs[state.currentTabIdx]
+    state.currentLayout.tabs = next
+    state.currentTabIdx = next.indexOf(activeTab)
+    if (state.currentTabIdx < 0) state.currentTabIdx = 0
+    markDirty({ structural: true })
+    renderEditor()
+  })
+}
+
 
 function clearDropZones() {
   document.querySelectorAll('.pane-drop-active').forEach(n => {

@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { reorderPanesForDrop, zoneToSplit, pickZone } = require('../renderer/paneTree')
+const { reorderPanesForDrop, zoneToSplit, pickZone, reorderTabsForDrop, pickTabSide } = require('../renderer/paneTree')
 
 test('zoneToSplit maps zones to wt split directions', () => {
   assert.equal(zoneToSplit('top'), 'up')
@@ -88,4 +88,49 @@ test('does not mutate original panes array', () => {
   const snapshot = JSON.stringify(panes)
   reorderPanesForDrop(panes, 1, 0, 'top')
   assert.equal(JSON.stringify(panes), snapshot)
+})
+
+test('pickTabSide picks before/after by horizontal half', () => {
+  assert.equal(pickTabSide(0.2), 'before')
+  assert.equal(pickTabSide(0.5), 'after')
+  assert.equal(pickTabSide(0.9), 'after')
+})
+
+test('reorderTabsForDrop moves a tab before the target', () => {
+  const tabs = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }]
+  const out = reorderTabsForDrop(tabs, 3, 1, 'before')
+  assert.deepEqual(out.map(t => t.id), ['A', 'D', 'B', 'C'])
+})
+
+test('reorderTabsForDrop moves a tab after the target', () => {
+  const tabs = [{ id: 'A' }, { id: 'B' }, { id: 'C' }]
+  const out = reorderTabsForDrop(tabs, 0, 2, 'after')
+  assert.deepEqual(out.map(t => t.id), ['B', 'C', 'A'])
+})
+
+test('reorderTabsForDrop handles dragIdx < targetIdx with side adjustment', () => {
+  const tabs = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }]
+  const out = reorderTabsForDrop(tabs, 0, 2, 'before')
+  assert.deepEqual(out.map(t => t.id), ['B', 'A', 'C', 'D'])
+})
+
+test('reorderTabsForDrop returns null on no-op moves', () => {
+  const tabs = [{ id: 'A' }, { id: 'B' }, { id: 'C' }]
+  assert.equal(reorderTabsForDrop(tabs, 1, 1, 'before'), null)
+  assert.equal(reorderTabsForDrop(tabs, 0, 1, 'before'), null)
+  assert.equal(reorderTabsForDrop(tabs, 1, 0, 'after'), null)
+})
+
+test('reorderTabsForDrop returns null on bad inputs', () => {
+  const tabs = [{ id: 'A' }, { id: 'B' }]
+  assert.equal(reorderTabsForDrop(tabs, 0, 1, 'middle'), null)
+  assert.equal(reorderTabsForDrop(tabs, -1, 0, 'before'), null)
+  assert.equal(reorderTabsForDrop(tabs, 0, 5, 'before'), null)
+})
+
+test('reorderTabsForDrop does not mutate input', () => {
+  const tabs = [{ id: 'A' }, { id: 'B' }, { id: 'C' }]
+  const snap = JSON.stringify(tabs)
+  reorderTabsForDrop(tabs, 2, 0, 'before')
+  assert.equal(JSON.stringify(tabs), snap)
 })

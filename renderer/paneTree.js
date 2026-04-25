@@ -36,7 +36,26 @@
     return out
   }
 
-  const api = { reorderPanesForDrop, zoneToSplit, pickZone }
+  function pickTabSide(xFrac) {
+    return xFrac < 0.5 ? 'before' : 'after'
+  }
+
+  function reorderTabsForDrop(tabs, dragIdx, targetIdx, side) {
+    if (!Array.isArray(tabs)) return null
+    if (side !== 'before' && side !== 'after') return null
+    if (dragIdx < 0 || dragIdx >= tabs.length) return null
+    if (targetIdx < 0 || targetIdx >= tabs.length) return null
+    if (dragIdx === targetIdx) return null
+    const baseIdx = side === 'after' ? targetIdx + 1 : targetIdx
+    const insertAt = dragIdx < baseIdx ? baseIdx - 1 : baseIdx
+    if (insertAt === dragIdx) return null
+    const out = tabs.slice()
+    const [item] = out.splice(dragIdx, 1)
+    out.splice(insertAt, 0, item)
+    return out
+  }
+
+  const api = { reorderPanesForDrop, zoneToSplit, pickZone, reorderTabsForDrop, pickTabSide }
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   if (typeof window !== 'undefined') window.PaneTree = api
