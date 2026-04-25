@@ -615,7 +615,84 @@ function renderPane(pane, paneIdx, tab, isLast) {
     markDirty({ structural: true })
     renderEditor()
   })
+
+  attachPaneDnd(card, pane, paneIdx, tab)
   return card
+}
+
+const DND_MIME = 'text/x-pane-idx'
+
+function clearDropZones() {
+  document.querySelectorAll('.pane-drop-active').forEach(n => {
+    n.classList.remove('pane-drop-active', 'zone-top', 'zone-right', 'zone-bottom', 'zone-left')
+  })
+}
+
+function isEditableTarget(target) {
+  if (!target) return false
+  const tag = target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (target.isContentEditable) return true
+  return false
+}
+
+function attachPaneDnd(card, pane, paneIdx, tab) {
+  card.dataset.paneIdx = String(paneIdx)
+  if (paneIdx > 0) card.setAttribute('draggable', 'true')
+
+  card.addEventListener('dragstart', (e) => {
+    if (paneIdx === 0) { e.preventDefault(); return }
+    if (isEditableTarget(e.target)) { e.preventDefault(); return }
+    e.dataTransfer.setData(DND_MIME, String(paneIdx))
+    e.dataTransfer.effectAllowed = 'move'
+    card.classList.add('pane-dragging')
+  })
+
+  card.addEventListener('dragend', () => {
+    card.classList.remove('pane-dragging')
+    clearDropZones()
+  })
+
+  card.addEventListener('dragover', (e) => {
+    const types = e.dataTransfer && e.dataTransfer.types
+    if (!types || !Array.from(types).includes(DND_MIME)) return
+    if (card.classList.contains('pane-dragging')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const r = card.getBoundingClientRect()
+    const x = (e.clientX - r.left) / r.width
+    const y = (e.clientY - r.top) / r.height
+    const zone = window.PaneTree.pickZone(x, y)
+    card.classList.add('pane-drop-active')
+    card.classList.remove('zone-top', 'zone-right', 'zone-bottom', 'zone-left')
+    card.classList.add(`zone-${zone}`)
+  })
+
+  card.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget && card.contains(e.relatedTarget)) return
+    card.classList.remove('pane-drop-active', 'zone-top', 'zone-right', 'zone-bottom', 'zone-left')
+  })
+
+  card.addEventListener('drop', (e) => {
+    const dragRaw = e.dataTransfer.getData(DND_MIME)
+    if (dragRaw === '') return
+    e.preventDefault()
+    const dragIdx = Number(dragRaw)
+    clearDropZones()
+    if (!Number.isFinite(dragIdx)) return
+    const r = card.getBoundingClientRect()
+    const x = (e.clientX - r.left) / r.width
+    const y = (e.clientY - r.top) / r.height
+    const zone = window.PaneTree.pickZone(x, y)
+    const next = window.PaneTree.reorderPanesForDrop(tab.panes, dragIdx, paneIdx, zone)
+    if (!next) {
+      if (dragIdx === 0) toast('Root pane cannot be moved', 'error')
+      return
+    }
+    tab.panes = next
+    markDirty({ structural: true })
+    renderEditor()
+  })
 }
 
 function serializeLayout() {

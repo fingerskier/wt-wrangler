@@ -580,6 +580,27 @@ select {
   transform: translate(50%, -50%);
 }
 .split-btn:hover:not(:disabled) { border-color: #6aa9d7; }
+
+.pane-card[draggable="true"] { cursor: grab; }
+.pane-card[draggable="true"]:active { cursor: grabbing; }
+.pane-card.pane-dragging { opacity: 0.45; }
+.pane-card.pane-drop-active { outline: 1px dashed var(--cobalt); outline-offset: -3px; }
+.pane-card.pane-drop-active::after {
+  content: '';
+  position: absolute;
+  background: rgba(74,134,200,0.22);
+  border: 1px solid var(--cobalt);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
+  transition: top 80ms ease, left 80ms ease, right 80ms ease, bottom 80ms ease, width 80ms ease, height 80ms ease;
+}
+.pane-card.pane-drop-active.zone-top::after { left: 0; right: 0; top: 0; height: 50%; }
+.pane-card.pane-drop-active.zone-bottom::after { left: 0; right: 0; bottom: 0; height: 50%; }
+.pane-card.pane-drop-active.zone-left::after { top: 0; bottom: 0; left: 0; width: 50%; }
+.pane-card.pane-drop-active.zone-right::after { top: 0; bottom: 0; right: 0; width: 50%; }
+.pane-card.pane-drop-active * { pointer-events: none; }
+.pane-card.pane-drop-active { pointer-events: auto; }
 .split-btn[data-action="splitRight"]:active:not(:disabled) { transform: translate(-50%, -50%) translateY(1px); }
 .split-btn[data-action="splitDown"]:active:not(:disabled) { transform: translate(50%, -50%) translateY(1px); }
 .pane-body {
