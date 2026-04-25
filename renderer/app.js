@@ -583,7 +583,10 @@ function renderPane(pane, paneIdx, tab, isLast) {
   splitSel.value = pane.split || 'right'
   splitSel.addEventListener('change', () => { pane.split = splitSel.value; markDirty({ structural: true }); renderEditor() })
   bindNumber('size')
-  bindText('profile'); bindText('dir'); bindText('command')
+  const profileSel = card.querySelector('[data-field="profile"]')
+  populateProfileSelect(profileSel, pane.profile || '')
+  profileSel.addEventListener('change', () => { pane.profile = profileSel.value; markDirty() })
+  bindText('dir'); bindText('command')
   attachDirPicker(card, pane, 'dir')
 
   const splitRightBtn = card.querySelector('[data-action="splitRight"]')
@@ -727,24 +730,31 @@ async function loadProfiles() {
   }
 }
 
-function renderProfileOptions() {
-  const dl = document.getElementById('profileOptions')
-  if (!dl) return
-  dl.innerHTML = ''
+function populateProfileSelect(sel, currentValue) {
+  sel.innerHTML = ''
   const seen = new Set()
-  const known = [...state.profiles]
-  if (state.currentLayout) {
-    for (const tab of state.currentLayout.tabs) {
-      for (const pane of tab.panes) if (pane.profile) known.push(pane.profile)
-    }
+  const names = []
+  for (const p of state.profiles) {
+    if (p && !seen.has(p)) { seen.add(p); names.push(p) }
   }
-  for (const name of known) {
-    if (!name || seen.has(name)) continue
-    seen.add(name)
+  if (currentValue && !seen.has(currentValue)) { seen.add(currentValue); names.push(currentValue) }
+  const blank = document.createElement('option')
+  blank.value = ''
+  blank.textContent = '(default)'
+  sel.appendChild(blank)
+  for (const name of names) {
     const opt = document.createElement('option')
     opt.value = name
-    dl.appendChild(opt)
+    opt.textContent = name
+    sel.appendChild(opt)
   }
+  sel.value = currentValue || ''
+}
+
+function renderProfileOptions() {
+  el.editor.querySelectorAll('select[data-field="profile"]').forEach(sel => {
+    populateProfileSelect(sel, sel.value)
+  })
 }
 
 el.pickDir.addEventListener('click', pickDir)

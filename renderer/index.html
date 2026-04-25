@@ -84,7 +84,7 @@
             </select>
           </label>
           <label data-split-only>Size <input data-field="size" type="number" step="0.05" min="0.05" max="0.95" /></label>
-          <label>Profile <input data-field="profile" type="text" list="profileOptions" /></label>
+          <label>Profile <select data-field="profile"></select></label>
           <label>Dir
             <span class="with-picker">
               <input data-field="dir" type="text" />
@@ -95,8 +95,6 @@
         </div>
       </div>
     </template>
-
-    <datalist id="profileOptions"></datalist>
 
     <div id="toast" class="toast hidden"></div>
 
