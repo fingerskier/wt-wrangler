@@ -190,7 +190,7 @@ function renderList() {
       e.preventDefault()
       e.stopPropagation()
       showContextMenu(e.clientX, e.clientY, [
-        { label: 'Open in File Explorer', action: () => revealPath(state.dir) },
+        { label: 'Open in File Explorer', action: () => openDir(state.dir) },
       ])
     })
     attachDropTarget(rootLi, state.dir)
@@ -216,7 +216,7 @@ function renderEntries(entries, parentUl, depth) {
         e.preventDefault()
         e.stopPropagation()
         showContextMenu(e.clientX, e.clientY, [
-          { label: 'Open in File Explorer', action: () => revealPath(entry.path) },
+          { label: 'Open in File Explorer', action: () => openDir(entry.path) },
         ])
       })
       attachDropTarget(li, entry.path)
@@ -243,7 +243,7 @@ function renderEntries(entries, parentUl, depth) {
         e.stopPropagation()
         showContextMenu(e.clientX, e.clientY, [
           { label: 'Run', action: () => runLayoutAt(entry.path) },
-          { label: 'Open in File Explorer', action: () => revealPath(entry.path) },
+          { label: 'Open in File Explorer', action: () => openLayoutFirstDir(entry.path) },
         ])
       })
       parentUl.appendChild(li)
@@ -743,6 +743,43 @@ async function revealPath(targetPath) {
     await window.wt.reveal(targetPath)
   } catch (err) {
     toast('Reveal failed: ' + err.message, 'error')
+  }
+}
+
+function findFirstLayoutDir(layout) {
+  const tabs = Array.isArray(layout?.tabs) ? layout.tabs : []
+  for (const tab of tabs) {
+    const panes = Array.isArray(tab?.panes) ? tab.panes : []
+    for (const pane of panes) {
+      if (pane && typeof pane.dir === 'string' && pane.dir.trim()) return pane.dir
+    }
+    if (tab && typeof tab.dir === 'string' && tab.dir.trim()) return tab.dir
+  }
+  return null
+}
+
+async function openDir(dirPath) {
+  try {
+    const err = await window.wt.openPath(dirPath)
+    if (err) toast('Open failed: ' + err, 'error')
+  } catch (err) {
+    toast('Open failed: ' + err.message, 'error')
+  }
+}
+
+async function openLayoutFirstDir(filePath) {
+  try {
+    const layout = await window.wt.read(filePath)
+    const dir = findFirstLayoutDir(layout)
+    if (!dir) {
+      toast('No dir set in layout — revealing JSON instead', 'error')
+      await window.wt.reveal(filePath)
+      return
+    }
+    const err = await window.wt.openPath(dir)
+    if (err) toast('Open failed: ' + err, 'error')
+  } catch (err) {
+    toast('Open failed: ' + err.message, 'error')
   }
 }
 

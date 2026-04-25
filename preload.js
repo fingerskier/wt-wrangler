@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('wt', {
   profiles: () => ipcRenderer.invoke('profiles:list'),
   pickAnyDir: defaultPath => ipcRenderer.invoke('dialog:pickDir', defaultPath),
   reveal: targetPath => ipcRenderer.invoke('shell:reveal', targetPath),
+  openPath: targetPath => ipcRenderer.invoke('shell:openPath', targetPath),
   configGet: () => ipcRenderer.invoke('config:get'),
   configSet: patch => ipcRenderer.invoke('config:set', patch),
 })

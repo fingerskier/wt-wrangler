@@ -134,6 +134,11 @@ ipcMain.handle('shell:reveal', async (_e, targetPath) => {
   return true
 })
 
+ipcMain.handle('shell:openPath', async (_e, targetPath) => {
+  if (!targetPath || typeof targetPath !== 'string') return ''
+  return shell.openPath(targetPath)
+})
+
 ipcMain.handle('dialog:pickDir', async (_e, defaultPath) => {
   const opts = {
     title: 'Select directory',
