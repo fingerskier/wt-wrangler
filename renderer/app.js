@@ -22,6 +22,7 @@ const el = {
   dirPath: document.getElementById('dirPath'),
   saveHint: document.getElementById('saveHint'),
   newLayout: document.getElementById('newLayout'),
+  ghUpdate: document.getElementById('ghUpdate'),
   layoutList: document.getElementById('layoutList'),
   editor: document.getElementById('editor'),
   toast: document.getElementById('toast'),
@@ -139,7 +140,41 @@ async function setLayoutsDir(dir) {
   el.dirPath.classList.remove('muted')
   el.newLayout.disabled = false
   updateSaveDirDisplay()
+  updateGhButton()
   await refreshList()
+}
+
+async function updateGhButton() {
+  if (!el.ghUpdate) return
+  if (!state.dir) { el.ghUpdate.classList.add('hidden'); return }
+  try {
+    const isRepo = await window.wt.isGitRepo(state.dir)
+    el.ghUpdate.classList.toggle('hidden', !isRepo)
+  } catch (_) {
+    el.ghUpdate.classList.add('hidden')
+  }
+}
+
+async function ghUpdateAction() {
+  if (!state.dir) return
+  el.ghUpdate.disabled = true
+  const prev = el.ghUpdate.textContent
+  el.ghUpdate.textContent = '…'
+  try {
+    const res = await window.wt.ghUpdate(state.dir)
+    if (res && res.ok) {
+      toast(res.committed ? 'Pushed' : 'Up to date', 'success')
+    } else {
+      const step = res && res.step ? `[${res.step}] ` : ''
+      const msg = res && res.error ? res.error : 'Unknown error'
+      toast(`GH update failed: ${step}${msg}`, 'error')
+    }
+  } catch (err) {
+    toast('GH update failed: ' + (err.message || err), 'error')
+  } finally {
+    el.ghUpdate.disabled = false
+    el.ghUpdate.textContent = prev
+  }
 }
 
 async function pickDir() {
@@ -902,6 +937,7 @@ function renderProfileOptions() {
 
 el.pickDir.addEventListener('click', pickDir)
 el.newLayout.addEventListener('click', newLayoutAction)
+if (el.ghUpdate) el.ghUpdate.addEventListener('click', ghUpdateAction)
 el.dirPath.addEventListener('click', () => {
   if (!state.dir) return
   state.saveDir = state.dir

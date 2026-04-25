@@ -12,14 +12,16 @@
         <button id="pickDir" type="button">Open Folder…</button>
         <span id="dirPath" class="muted" title="Click to save to root folder">(no folder)</span>
         <span id="saveHint" class="save-hint hidden"></span>
+        <button id="ghUpdate" type="button" class="hidden" title="git add -A, commit, push">GH Update</button>
       </div>
-      <div class="spacer"></div>
-      <button id="newLayout" type="button" disabled>New Layout</button>
     </header>
 
     <main class="app">
       <aside class="sidebar">
-        <h2>Layouts</h2>
+        <div class="sidebar-head">
+          <h2>Layouts</h2>
+          <button id="newLayout" type="button" class="small" disabled>+ New</button>
+        </div>
         <ul id="layoutList" class="layout-list"></ul>
       </aside>
 

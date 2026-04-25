@@ -139,6 +139,42 @@ ipcMain.handle('shell:openPath', async (_e, targetPath) => {
   return shell.openPath(targetPath)
 })
 
+async function isGitRepo(dir) {
+  if (!dir || typeof dir !== 'string') return false
+  try {
+    const stat = await fs.stat(path.join(dir, '.git'))
+    return stat.isDirectory() || stat.isFile()
+  } catch (_) {
+    return false
+  }
+}
+
+function runGit(args, cwd) {
+  return new Promise((resolve) => {
+    const child = spawn('git', args, { cwd, windowsHide: true })
+    let stdout = '', stderr = ''
+    child.stdout.on('data', d => { stdout += d.toString() })
+    child.stderr.on('data', d => { stderr += d.toString() })
+    child.on('error', err => resolve({ code: -1, stdout, stderr: err.message || String(err) }))
+    child.on('close', code => resolve({ code, stdout, stderr }))
+  })
+}
+
+ipcMain.handle('git:isRepo', async (_e, dir) => isGitRepo(dir))
+
+ipcMain.handle('gh:update', async (_e, dir) => {
+  if (!await isGitRepo(dir)) return { ok: false, step: 'check', error: 'Not a git repository' }
+  const add = await runGit(['add', '-A'], dir)
+  if (add.code !== 0) return { ok: false, step: 'add', error: (add.stderr || add.stdout).trim() }
+  const msg = `Wrangler update ${new Date().toISOString()}`
+  const commit = await runGit(['commit', '-m', msg], dir)
+  const nothing = commit.code !== 0 && /nothing to commit|no changes added/i.test(commit.stdout + commit.stderr)
+  if (commit.code !== 0 && !nothing) return { ok: false, step: 'commit', error: (commit.stderr || commit.stdout).trim() }
+  const push = await runGit(['push'], dir)
+  if (push.code !== 0) return { ok: false, step: 'push', error: (push.stderr || push.stdout).trim() }
+  return { ok: true, committed: !nothing, message: msg }
+})
+
 ipcMain.handle('dialog:pickDir', async (_e, defaultPath) => {
   const opts = {
     title: 'Select directory',

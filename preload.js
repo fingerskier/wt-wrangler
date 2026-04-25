@@ -18,4 +18,6 @@ contextBridge.exposeInMainWorld('wt', {
   openPath: targetPath => ipcRenderer.invoke('shell:openPath', targetPath),
   configGet: () => ipcRenderer.invoke('config:get'),
   configSet: patch => ipcRenderer.invoke('config:set', patch),
+  isGitRepo: dir => ipcRenderer.invoke('git:isRepo', dir),
+  ghUpdate: dir => ipcRenderer.invoke('gh:update', dir),
 })
