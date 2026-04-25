@@ -422,6 +422,7 @@ function renderTabbar(host) {
     btn.addEventListener('click', (e) => {
       if (e.target.closest('[data-action="removeTab"]')) return
       if (e.target.closest('[data-tab-title-input]')) return
+      if (idx === state.currentTabIdx) return
       state.currentTabIdx = idx
       renderEditor()
     })
