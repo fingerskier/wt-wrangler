@@ -186,6 +186,13 @@ function renderList() {
       updateSaveDirDisplay()
       renderList()
     })
+    rootLi.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      showContextMenu(e.clientX, e.clientY, [
+        { label: 'Open in File Explorer', action: () => revealPath(state.dir) },
+      ])
+    })
     attachDropTarget(rootLi, state.dir)
     el.layoutList.appendChild(rootLi)
   }
@@ -205,6 +212,13 @@ function renderEntries(entries, parentUl, depth) {
       li.textContent = `${isOpen ? '▾' : '▸'} ${entry.name}`
       li.title = 'Click to select as save target'
       li.addEventListener('click', (e) => { e.stopPropagation(); onDirClick(entry.path) })
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        showContextMenu(e.clientX, e.clientY, [
+          { label: 'Open in File Explorer', action: () => revealPath(entry.path) },
+        ])
+      })
       attachDropTarget(li, entry.path)
       parentUl.appendChild(li)
       if (isOpen) {
@@ -224,6 +238,14 @@ function renderEntries(entries, parentUl, depth) {
       if (entry.error) { li.classList.add('error'); li.title = entry.error }
       if (entry.path === state.currentPath) li.classList.add('active')
       li.addEventListener('click', () => selectLayout(entry.path))
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        showContextMenu(e.clientX, e.clientY, [
+          { label: 'Run', action: () => runLayoutAt(entry.path) },
+          { label: 'Open in File Explorer', action: () => revealPath(entry.path) },
+        ])
+      })
       parentUl.appendChild(li)
     }
   }
@@ -706,6 +728,64 @@ el.dirPath.addEventListener('drop', async (e) => {
   if (!src) return
   await moveLayout(src, state.dir)
 })
+async function runLayoutAt(filePath) {
+  try {
+    const layout = await window.wt.read(filePath)
+    await window.wt.run(normalizeLayout(layout))
+    toast('Launching Windows Terminal…', 'success')
+  } catch (err) {
+    toast('Run failed: ' + err.message, 'error')
+  }
+}
+
+async function revealPath(targetPath) {
+  try {
+    await window.wt.reveal(targetPath)
+  } catch (err) {
+    toast('Reveal failed: ' + err.message, 'error')
+  }
+}
+
+function showContextMenu(x, y, items) {
+  hideContextMenu()
+  const menu = document.createElement('ul')
+  menu.className = 'ctx-menu'
+  menu.id = 'ctxMenu'
+  for (const item of items) {
+    const li = document.createElement('li')
+    li.className = 'ctx-menu-item'
+    li.textContent = item.label
+    li.addEventListener('click', () => {
+      hideContextMenu()
+      item.action()
+    })
+    menu.appendChild(li)
+  }
+  menu.style.left = '0px'
+  menu.style.top = '0px'
+  document.body.appendChild(menu)
+  const rect = menu.getBoundingClientRect()
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const px = Math.min(x, vw - rect.width - 4)
+  const py = Math.min(y, vh - rect.height - 4)
+  menu.style.left = `${Math.max(0, px)}px`
+  menu.style.top = `${Math.max(0, py)}px`
+}
+
+function hideContextMenu() {
+  const m = document.getElementById('ctxMenu')
+  if (m) m.remove()
+}
+
+window.addEventListener('click', hideContextMenu)
+window.addEventListener('blur', hideContextMenu)
+window.addEventListener('resize', hideContextMenu)
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu() })
+document.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('.layout-list li')) hideContextMenu()
+}, true)
+
 loadProfiles()
 restoreLastDir()
 

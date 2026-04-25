@@ -5,7 +5,7 @@ if (require('electron-squirrel-startup')) {
   return
 }
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs/promises')
 const { spawn } = require('node:child_process')
@@ -125,6 +125,12 @@ ipcMain.handle('config:get', async () => {
 ipcMain.handle('config:set', async (_e, patch) => {
   if (!patch || typeof patch !== 'object') return false
   await store.write(patch)
+  return true
+})
+
+ipcMain.handle('shell:reveal', async (_e, targetPath) => {
+  if (!targetPath || typeof targetPath !== 'string') return false
+  shell.showItemInFolder(targetPath)
   return true
 })
 
