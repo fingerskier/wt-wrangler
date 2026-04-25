@@ -421,8 +421,14 @@ function renderTabbar(host) {
     if (idx === state.currentTabIdx) btn.classList.add('active')
     btn.addEventListener('click', (e) => {
       if (e.target.closest('[data-action="removeTab"]')) return
+      if (e.target.closest('[data-tab-title-input]')) return
       state.currentTabIdx = idx
       renderEditor()
+    })
+    title.addEventListener('dblclick', (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      beginTabTitleEdit(btn, title, tab, idx)
     })
     frag.querySelector('[data-action="removeTab"]').addEventListener('click', (e) => {
       e.stopPropagation()
@@ -449,19 +455,54 @@ function renderTabbar(host) {
 function renderTabView(tab) {
   const frag = templates.tabView.content.cloneNode(true)
   const root = frag.querySelector('.tab-view-inner')
-  const titleInput = root.querySelector('[data-field="title"]')
-  titleInput.value = tab.title || ''
-  titleInput.addEventListener('input', () => {
-    tab.title = titleInput.value
-    const title = el.editor.querySelectorAll('.tabbar-item')[state.currentTabIdx]?.querySelector('[data-tab-title]')
-    if (title) title.textContent = titleInput.value || `Tab ${state.currentTabIdx + 1}`
-    markDirty()
-  })
-
   const treeHost = root.querySelector('[data-pane-tree]')
   const tree = buildPaneTree(tab.panes)
   if (tree) treeHost.appendChild(renderPaneNode(tree, tab))
   return frag
+}
+
+function beginTabTitleEdit(btn, titleEl, tab, idx) {
+  if (btn.querySelector('[data-tab-title-input]')) return
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'tabbar-title-input'
+  input.setAttribute('data-tab-title-input', '')
+  input.value = tab.title || ''
+  input.placeholder = `Tab ${idx + 1}`
+  titleEl.replaceWith(input)
+  input.focus()
+  input.select()
+  let done = false
+  const stop = (e) => e.stopPropagation()
+  input.addEventListener('mousedown', stop)
+  input.addEventListener('click', stop)
+  input.addEventListener('dblclick', stop)
+  const commit = (save) => {
+    if (done) return
+    done = true
+    if (save) {
+      const v = input.value.trim()
+      if ((tab.title || '') !== v) {
+        tab.title = v
+        markDirty()
+      }
+    }
+    const span = document.createElement('span')
+    span.className = 'tabbar-title'
+    span.setAttribute('data-tab-title', '')
+    span.textContent = tab.title || `Tab ${idx + 1}`
+    span.addEventListener('dblclick', (e) => {
+      e.stopPropagation()
+      e.preventDefault()
+      beginTabTitleEdit(btn, span, tab, idx)
+    })
+    input.replaceWith(span)
+  }
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(true); btn.focus() }
+    else if (e.key === 'Escape') { e.preventDefault(); commit(false); btn.focus() }
+  })
+  input.addEventListener('blur', () => commit(true))
 }
 
 function buildPaneTree(panes) {
