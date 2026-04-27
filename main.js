@@ -10,7 +10,8 @@ const path = require('node:path')
 const fs = require('node:fs/promises')
 const { spawn } = require('node:child_process')
 const { buildWtArgv, buildWtCommand } = require('./src/wtCommand')
-const { discoverProfiles } = require('./src/wtProfiles')
+const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./src/wtProfiles')
+const styleApply = require('./src/wtStyleApply')
 const { makeStore } = require('./src/config')
 const { listEntries, moveLayoutFile } = require('./src/layouts')
 
@@ -93,12 +94,119 @@ ipcMain.handle('layouts:delete', async (_e, filePath) => {
   return true
 })
 
+async function applyStyleForLaunch(layout) {
+  const style = layout && layout.windowStyle
+  const result = { applied: { profile: false, window: false }, fragmentPath: null, settingsPath: null, backupPath: null, mapping: {}, warnings: [] }
+  if (!style || (!styleApply.hasProfileStyle(style) && !styleApply.hasWindowStyle(style))) return result
+
+  const settingsPath = findExistingSettingsPath()
+  let settings = null
+  if (settingsPath) {
+    try {
+      settings = parseJsonc(await fs.readFile(settingsPath, 'utf8'))
+    } catch (err) {
+      result.warnings.push(`could not parse WT settings.json: ${err.message}`)
+    }
+  } else {
+    result.warnings.push('WT settings.json not found — window-level keys will be skipped')
+  }
+  result.settingsPath = settingsPath
+
+  if (styleApply.hasProfileStyle(style)) {
+    const { fragment, mapping } = styleApply.buildFragment(layout, settings)
+    if (fragment) {
+      const fragPath = await writeFragmentFile(layout, fragment)
+      result.fragmentPath = fragPath
+      result.mapping = mapping
+      result.applied.profile = true
+    }
+  }
+
+  if (styleApply.hasWindowStyle(style)) {
+    if (!settings || !settingsPath) {
+      result.warnings.push('window-level keys (useMica/frame/etc) need settings.json — skipping')
+    } else {
+      const { settings: nextSettings, changed } = styleApply.applyWindowStyleToSettings(settings, style)
+      if (changed) {
+        const backup = await ensureSettingsBackup(settingsPath)
+        if (backup) result.backupPath = backup
+        await writeFileAtomic(settingsPath, JSON.stringify(nextSettings, null, 4) + '\n')
+        result.applied.window = true
+      }
+    }
+  }
+
+  return result
+}
+
+function findExistingSettingsPath() {
+  for (const p of candidateSettingsPaths()) {
+    try { if (require('node:fs').existsSync(p)) return p } catch (_) {}
+  }
+  return null
+}
+
+function fragmentDir() {
+  const localAppData = process.env.LOCALAPPDATA || ''
+  if (!localAppData) return null
+  return path.join(localAppData, 'Microsoft', 'Windows Terminal', 'Fragments', 'wt-wrangler')
+}
+
+async function writeFragmentFile(layout, fragment) {
+  const dir = fragmentDir()
+  if (!dir) throw new Error('LOCALAPPDATA not set')
+  await fs.mkdir(dir, { recursive: true })
+  const safeWin = String(layout.window || 'wtw').replace(/[^A-Za-z0-9_\-]/g, '_')
+  const file = path.join(dir, `${safeWin}.json`)
+  await writeFileAtomic(file, JSON.stringify(fragment, null, 2) + '\n')
+  return file
+}
+
+async function writeFileAtomic(filePath, content) {
+  const tmp = `${filePath}.wtw-tmp-${Date.now()}`
+  await fs.writeFile(tmp, content, 'utf8')
+  await fs.rename(tmp, filePath)
+}
+
+async function ensureSettingsBackup(settingsPath) {
+  const dir = path.dirname(settingsPath)
+  const base = path.basename(settingsPath)
+  const existing = await fs.readdir(dir).catch(() => [])
+  if (existing.some(n => n.startsWith(`${base}.wtw-backup-`))) return null
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backup = path.join(dir, `${base}.wtw-backup-${stamp}`)
+  await fs.copyFile(settingsPath, backup)
+  return backup
+}
+
+ipcMain.handle('wt:applyStyle', async (_e, layout) => {
+  try {
+    return await applyStyleForLaunch(layout)
+  } catch (err) {
+    return { error: err.message || String(err) }
+  }
+})
+
 ipcMain.handle('layouts:run', async (_e, layout) => {
-  const argv = buildWtArgv(layout)
-  const preview = buildWtCommand(layout)
+  let effective = layout
+  let applyResult = null
+  try {
+    applyResult = await applyStyleForLaunch(layout)
+    if (applyResult && applyResult.mapping && Object.keys(applyResult.mapping).length) {
+      effective = styleApply.remapLayoutProfiles(layout, applyResult.mapping)
+    }
+    if (applyResult && (applyResult.applied.profile || applyResult.applied.window)) {
+      // Give WT a moment to pick up settings/fragment changes before launch.
+      await new Promise(r => setTimeout(r, 600))
+    }
+  } catch (err) {
+    applyResult = { error: err.message || String(err) }
+  }
+  const argv = buildWtArgv(effective)
+  const preview = buildWtCommand(effective)
   const child = spawn(preview, { shell: true, detached: true, stdio: 'ignore', windowsHide: true })
   child.unref()
-  return { argv, preview, pid: child.pid }
+  return { argv, preview, pid: child.pid, style: applyResult }
 })
 
 ipcMain.handle('layouts:preview', async (_e, layout) => {
@@ -179,6 +287,21 @@ ipcMain.handle('dialog:pickDir', async (_e, defaultPath) => {
   const opts = {
     title: 'Select directory',
     properties: ['openDirectory'],
+  }
+  if (defaultPath && typeof defaultPath === 'string') opts.defaultPath = defaultPath
+  const res = await dialog.showOpenDialog(mainWindow, opts)
+  if (res.canceled || !res.filePaths.length) return null
+  return res.filePaths[0]
+})
+
+ipcMain.handle('dialog:pickImage', async (_e, defaultPath) => {
+  const opts = {
+    title: 'Select background image',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tif', 'tiff'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
   }
   if (defaultPath && typeof defaultPath === 'string') opts.defaultPath = defaultPath
   const res = await dialog.showOpenDialog(mainWindow, opts)

@@ -864,8 +864,18 @@ async function runCurrent() {
       if (!ok) return
     }
     const serialized = serializeLayout()
-    await window.wt.run(serialized)
-    toast('Launching Windows Terminal…', 'success')
+    const res = await window.wt.run(serialized)
+    const style = res && res.style
+    if (style && Array.isArray(style.warnings) && style.warnings.length) {
+      for (const w of style.warnings) toast('Style: ' + w, 'error')
+    } else if (style && (style.applied?.profile || style.applied?.window)) {
+      const parts = []
+      if (style.applied.profile) parts.push('profile fragment')
+      if (style.applied.window) parts.push('window settings')
+      toast(`Style applied (${parts.join(' + ')}). Launching…`, 'success')
+    } else {
+      toast('Launching Windows Terminal…', 'success')
+    }
   } catch (err) {
     toast('Run failed: ' + err.message, 'error')
   }
@@ -1105,6 +1115,8 @@ function renderStyleField(def) {
       modalPending[def.key] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : undefined
     })
   } else if (def.type === 'path') {
+    const row = document.createElement('span')
+    row.className = 'with-picker'
     control = document.createElement('input')
     control.type = 'text'
     control.placeholder = def.hint || ''
@@ -1113,6 +1125,29 @@ function renderStyleField(def) {
       const s = control.value.trim()
       modalPending[def.key] = s === '' ? undefined : s
     })
+    const pick = document.createElement('button')
+    pick.type = 'button'
+    pick.textContent = '…'
+    pick.title = 'Browse for image'
+    pick.addEventListener('click', async () => {
+      try {
+        const start = control.value || state.dir || undefined
+        const res = await window.wt.pickImage(start)
+        if (res) { control.value = res; modalPending[def.key] = res }
+      } catch (err) {
+        toast('Pick failed: ' + (err.message || err), 'error')
+      }
+    })
+    row.appendChild(control)
+    row.appendChild(pick)
+    wrap.appendChild(row)
+    if (def.hint) {
+      const hint = document.createElement('span')
+      hint.className = 'modal-field-hint'
+      hint.textContent = def.hint
+      wrap.appendChild(hint)
+    }
+    return wrap
   } else {
     // color / string
     const row = document.createElement('span')
