@@ -10,7 +10,6 @@ test('KEYS lists exactly the supported settings', () => {
     'background',
     'unfocusedBackground',
     'useMica',
-    'frame',
     'showTabsInTitlebar',
     'useAcrylicInTabRow',
     'opacity',
@@ -47,14 +46,18 @@ test('normalize drops empty-string color/path fields', () => {
 test('normalize keeps booleans only when strictly boolean', () => {
   const out = WS.normalize({
     useMica: true,
-    frame: false,
     showTabsInTitlebar: 'yes',
     useAcrylicInTabRow: 1,
   })
   assert.equal(out.useMica, true)
-  assert.equal(out.frame, false)
   assert.equal(out.showTabsInTitlebar, undefined)
   assert.equal(out.useAcrylicInTabRow, undefined)
+})
+
+test('normalize ignores unknown keys (e.g. removed frame)', () => {
+  const out = WS.normalize({ frame: true, useMica: true })
+  assert.equal(out.useMica, true)
+  assert.equal('frame' in out, false)
 })
 
 test('normalize clamps opacity to 0-100 integer percent', () => {
@@ -84,9 +87,9 @@ test('serialize omits undefined keys', () => {
 })
 
 test('serialize keeps boolean false (explicit user intent)', () => {
-  const out = WS.serialize(WS.normalize({ useMica: false, frame: true }))
+  const out = WS.serialize(WS.normalize({ useMica: false, showTabsInTitlebar: true }))
   assert.equal(out.useMica, false)
-  assert.equal(out.frame, true)
+  assert.equal(out.showTabsInTitlebar, true)
 })
 
 test('serialize returns undefined when no keys are set', () => {
@@ -110,5 +113,5 @@ test('round-trip normalize -> serialize -> normalize is stable', () => {
 test('hasAny reports whether any key is set', () => {
   assert.equal(WS.hasAny(WS.normalize(undefined)), false)
   assert.equal(WS.hasAny(WS.normalize({ useMica: true })), true)
-  assert.equal(WS.hasAny(WS.normalize({ frame: false })), true)
+  assert.equal(WS.hasAny(WS.normalize({ useAcrylicInTabRow: false })), true)
 })

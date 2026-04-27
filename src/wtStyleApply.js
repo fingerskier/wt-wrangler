@@ -10,7 +10,6 @@ const PROFILE_KEYS = [
 
 const WINDOW_KEYS = [
   'useMica',
-  'frame',
   'showTabsInTitlebar',
   'useAcrylicInTabRow',
 ]

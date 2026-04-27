@@ -5,7 +5,6 @@
     { key: 'background',             type: 'color',  label: 'Background',           hint: '#rrggbb' },
     { key: 'unfocusedBackground',    type: 'color',  label: 'Unfocused background', hint: '#rrggbb' },
     { key: 'useMica',                type: 'bool',   label: 'Use Mica' },
-    { key: 'frame',                  type: 'bool',   label: 'Frame' },
     { key: 'showTabsInTitlebar',     type: 'bool',   label: 'Tabs in titlebar' },
     { key: 'useAcrylicInTabRow',     type: 'bool',   label: 'Acrylic tab row' },
     { key: 'opacity',                type: 'percent', label: 'Opacity (%)',          hint: '0-100' },
