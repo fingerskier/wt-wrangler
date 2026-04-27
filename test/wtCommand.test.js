@@ -74,6 +74,15 @@ test('composeShellCommand returns empty when no command', () => {
   assert.equal(composeShellCommand({ profile: 'cmd' }), '')
 })
 
+test('composeShellCommand prefers pane.shellKind over profile name', () => {
+  const out = composeShellCommand({
+    profile: 'wtw-Claude_Plugins-Command_Prompt',
+    shellKind: 'cmd',
+    command: 'claude "start terse"',
+  })
+  assert.equal(out, 'cmd /k claude "start terse"')
+})
+
 test('buildWtCommand throws on empty layout', () => {
   assert.throws(() => buildWtCommand({}), /at least one tab/)
 })

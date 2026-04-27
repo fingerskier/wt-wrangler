@@ -30,7 +30,8 @@ function wrapThroughShell(kind, script) {
 function composeShellCommand(pane) {
   const main = pane.command || ''
   if (!main) return ''
-  return wrapThroughShell(profileKind(pane.profile), main)
+  const kind = pane.shellKind || profileKind(pane.profile)
+  return wrapThroughShell(kind, main)
 }
 
 function buildPaneArgs(pane, isFirstInTab, target) {
@@ -108,4 +109,4 @@ function buildWtArgv(layout) {
   return argv
 }
 
-module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg, resolveWindowTarget }
+module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg, resolveWindowTarget, profileKind }

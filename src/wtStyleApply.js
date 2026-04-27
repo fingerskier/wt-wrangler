@@ -1,5 +1,7 @@
 'use strict'
 
+const { profileKind } = require('./wtCommand')
+
 const PROFILE_KEYS = [
   'background',
   'unfocusedBackground',
@@ -141,6 +143,7 @@ function remapLayoutProfiles(layout, mapping) {
     const panes = Array.isArray(tab.panes) ? tab.panes : []
     for (const p of panes) {
       if (p && typeof p.profile === 'string' && mapping[p.profile]) {
+        if (!p.shellKind) p.shellKind = profileKind(p.profile)
         p.profile = mapping[p.profile]
       }
     }

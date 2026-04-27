@@ -130,3 +130,15 @@ test('remapLayoutProfiles is no-op for empty mapping', () => {
   const next = A.remapLayoutProfiles(styledLayout, {})
   assert.equal(next.tabs[0].panes[0].profile, 'pwsh')
 })
+
+test('remapLayoutProfiles stashes original shellKind so shell wrapper survives remap', () => {
+  const cmdLayout = {
+    window: 'cwin',
+    windowStyle: { background: '#000' },
+    tabs: [{ title: 't', panes: [{ profile: 'Command Prompt', command: 'claude "start terse"' }] }],
+  }
+  const mapping = { 'Command Prompt': 'wtw-cwin-Command_Prompt' }
+  const next = A.remapLayoutProfiles(cmdLayout, mapping)
+  assert.equal(next.tabs[0].panes[0].profile, 'wtw-cwin-Command_Prompt')
+  assert.equal(next.tabs[0].panes[0].shellKind, 'cmd')
+})
