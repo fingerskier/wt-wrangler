@@ -72,6 +72,7 @@ function emptyLayout() {
   return {
     name: 'new-layout',
     window: '',
+    windowStyle: window.WindowStyle.normalize(undefined),
     tabs: [
       {
         title: 'Tab 1',
@@ -364,6 +365,7 @@ function normalizeLayout(layout) {
   const out = {
     name: layout.name || '',
     window: layout.window || '',
+    windowStyle: window.WindowStyle.normalize(layout.windowStyle),
     tabs: Array.isArray(layout.tabs) ? layout.tabs.map(normalizeTab) : [],
   }
   if (!out.tabs.length) out.tabs.push(normalizeTab({}))
@@ -425,6 +427,13 @@ function renderEditor() {
   node.querySelector('[data-action="save"]').addEventListener('click', () => saveCurrent())
   node.querySelector('[data-action="run"]').addEventListener('click', runCurrent)
   node.querySelector('[data-action="delete"]').addEventListener('click', deleteCurrent)
+  const paletteBtn = node.querySelector('[data-action="palette"]')
+  if (paletteBtn) {
+    paletteBtn.addEventListener('click', openPaletteModal)
+    if (window.WindowStyle.hasAny(state.currentLayout.windowStyle)) {
+      paletteBtn.classList.add('has-style')
+    }
+  }
 
   const tabbarHost = node.querySelector('[data-tabbar]')
   const tabViewHost = node.querySelector('[data-tab-view]')
@@ -798,9 +807,11 @@ function attachPaneDnd(card, pane, paneIdx, tab) {
 
 function serializeLayout() {
   const layout = state.currentLayout
+  const styleOut = window.WindowStyle.serialize(layout.windowStyle)
   const out = {
     name: layout.name || 'layout',
     window: layout.window || undefined,
+    windowStyle: styleOut,
     tabs: layout.tabs.map(tab => ({
       title: tab.title || undefined,
       panes: tab.panes.map((pane, idx) => {
@@ -817,6 +828,7 @@ function serializeLayout() {
     })),
   }
   if (!out.window) delete out.window
+  if (!out.windowStyle) delete out.windowStyle
   return out
 }
 
@@ -1014,6 +1026,170 @@ async function openLayoutFirstDir(filePath) {
   }
 }
 
+const modalRoot = document.getElementById('modalRoot')
+const modalBody = document.getElementById('modalBody')
+let modalPending = null
+
+function openPaletteModal() {
+  if (!state.currentLayout) return
+  modalPending = window.WindowStyle.normalize(state.currentLayout.windowStyle)
+  renderPaletteModal()
+  modalRoot.classList.remove('hidden')
+  modalRoot.setAttribute('aria-hidden', 'false')
+  const first = modalBody.querySelector('input, select')
+  if (first) first.focus()
+}
+
+function closeModal() {
+  modalRoot.classList.add('hidden')
+  modalRoot.setAttribute('aria-hidden', 'true')
+  modalBody.innerHTML = ''
+  modalPending = null
+}
+
+function renderPaletteModal() {
+  modalBody.innerHTML = ''
+  for (const def of window.WindowStyle.KEYS) {
+    modalBody.appendChild(renderStyleField(def))
+  }
+}
+
+function renderStyleField(def) {
+  const wrap = document.createElement('label')
+  wrap.className = `modal-field field-${def.type}`
+  const labelText = document.createElement('span')
+  labelText.className = 'modal-field-label'
+  labelText.textContent = def.label
+  wrap.appendChild(labelText)
+
+  const cur = modalPending[def.key]
+  let control
+  if (def.type === 'bool') {
+    control = document.createElement('select')
+    for (const opt of [
+      { v: '', t: '(unset)' },
+      { v: 'true', t: 'true' },
+      { v: 'false', t: 'false' },
+    ]) {
+      const o = document.createElement('option')
+      o.value = opt.v
+      o.textContent = opt.t
+      control.appendChild(o)
+    }
+    control.value = cur === true ? 'true' : cur === false ? 'false' : ''
+    control.addEventListener('change', () => {
+      modalPending[def.key] = control.value === '' ? undefined : control.value === 'true'
+    })
+  } else if (def.type === 'percent') {
+    control = document.createElement('input')
+    control.type = 'number'
+    control.min = '0'
+    control.max = '100'
+    control.step = '1'
+    control.placeholder = def.hint || ''
+    control.value = cur === undefined ? '' : String(cur)
+    control.addEventListener('input', () => {
+      const v = control.value === '' ? undefined : Number(control.value)
+      modalPending[def.key] = Number.isFinite(v) ? Math.round(Math.max(0, Math.min(100, v))) : undefined
+    })
+  } else if (def.type === 'unit') {
+    control = document.createElement('input')
+    control.type = 'number'
+    control.min = '0'
+    control.max = '1'
+    control.step = '0.05'
+    control.placeholder = def.hint || ''
+    control.value = cur === undefined ? '' : String(cur)
+    control.addEventListener('input', () => {
+      const v = control.value === '' ? undefined : Number(control.value)
+      modalPending[def.key] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : undefined
+    })
+  } else if (def.type === 'path') {
+    control = document.createElement('input')
+    control.type = 'text'
+    control.placeholder = def.hint || ''
+    control.value = cur || ''
+    control.addEventListener('input', () => {
+      const s = control.value.trim()
+      modalPending[def.key] = s === '' ? undefined : s
+    })
+  } else {
+    // color / string
+    const row = document.createElement('span')
+    row.className = 'color-row'
+    control = document.createElement('input')
+    control.type = 'text'
+    control.placeholder = def.hint || ''
+    control.value = cur || ''
+    const swatch = document.createElement('input')
+    swatch.type = 'color'
+    swatch.className = 'color-swatch'
+    swatch.value = isHex(cur) ? cur : '#000000'
+    control.addEventListener('input', () => {
+      const s = control.value.trim()
+      modalPending[def.key] = s === '' ? undefined : s
+      if (isHex(s)) swatch.value = s
+    })
+    swatch.addEventListener('input', () => {
+      control.value = swatch.value
+      modalPending[def.key] = swatch.value
+    })
+    row.appendChild(control)
+    row.appendChild(swatch)
+    wrap.appendChild(row)
+    if (def.hint) {
+      const hint = document.createElement('span')
+      hint.className = 'modal-field-hint'
+      hint.textContent = def.hint
+      wrap.appendChild(hint)
+    }
+    return wrap
+  }
+  wrap.appendChild(control)
+  if (def.hint) {
+    const hint = document.createElement('span')
+    hint.className = 'modal-field-hint'
+    hint.textContent = def.hint
+    wrap.appendChild(hint)
+  }
+  return wrap
+}
+
+function isHex(s) {
+  return typeof s === 'string' && /^#[0-9a-fA-F]{6}$/.test(s)
+}
+
+function applyPaletteModal() {
+  if (!state.currentLayout || !modalPending) { closeModal(); return }
+  const next = window.WindowStyle.normalize(modalPending)
+  const prev = window.WindowStyle.normalize(state.currentLayout.windowStyle)
+  state.currentLayout.windowStyle = next
+  if (JSON.stringify(prev) !== JSON.stringify(next)) {
+    markDirty({ structural: true })
+    renderEditor()
+  }
+  closeModal()
+}
+
+function resetPaletteModal() {
+  modalPending = window.WindowStyle.normalize(undefined)
+  renderPaletteModal()
+}
+
+if (modalRoot) {
+  modalRoot.addEventListener('click', (e) => {
+    const t = e.target
+    if (!(t instanceof HTMLElement)) return
+    if (t.matches('[data-modal-dismiss]') || t.matches('[data-action="modalCancel"]')) {
+      closeModal()
+    } else if (t.matches('[data-action="modalApply"]')) {
+      applyPaletteModal()
+    } else if (t.matches('[data-action="modalReset"]')) {
+      resetPaletteModal()
+    }
+  })
+}
+
 function showContextMenu(x, y, items) {
   hideContextMenu()
   const menu = document.createElement('ul')
@@ -1049,7 +1225,12 @@ function hideContextMenu() {
 window.addEventListener('click', hideContextMenu)
 window.addEventListener('blur', hideContextMenu)
 window.addEventListener('resize', hideContextMenu)
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu() })
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    hideContextMenu()
+    if (modalRoot && !modalRoot.classList.contains('hidden')) closeModal()
+  }
+})
 document.addEventListener('contextmenu', (e) => {
   if (!e.target.closest('.layout-list li')) hideContextMenu()
 }, true)

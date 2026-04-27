@@ -38,6 +38,7 @@
           <div class="editor-actions">
             <button data-action="undo" type="button" title="Undo (Ctrl+Z)">↶</button>
             <button data-action="redo" type="button" title="Redo (Ctrl+Y)">↷</button>
+            <button data-action="palette" type="button" class="palette-btn" title="Window style…">🎨</button>
             <button data-action="save" type="button" class="primary">Save</button>
             <button data-action="run" type="button" class="success">Run</button>
             <button data-action="delete" type="button" class="danger">Delete</button>
@@ -99,8 +100,26 @@
 
     <div id="toast" class="toast hidden"></div>
 
+    <div id="modalRoot" class="modal-root hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-modal-dismiss></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <header class="modal-head">
+          <h3 id="modalTitle">Window Style</h3>
+          <button type="button" class="modal-close" data-modal-dismiss title="Close">×</button>
+        </header>
+        <div class="modal-body" id="modalBody"></div>
+        <footer class="modal-foot">
+          <button type="button" data-action="modalReset" class="danger small">Reset all</button>
+          <span class="spacer"></span>
+          <button type="button" data-action="modalCancel">Cancel</button>
+          <button type="button" data-action="modalApply" class="primary">Apply</button>
+        </footer>
+      </div>
+    </div>
+
     <script src="history.js"></script>
     <script src="paneTree.js"></script>
+    <script src="windowStyle.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
