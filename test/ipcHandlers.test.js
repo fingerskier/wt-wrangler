@@ -299,10 +299,19 @@ test('layouts:preview returns wt command string', async () => {
   assert.match(cmd, /^wt(\.exe)? /)
 })
 
-test('layouts:run spawns wt with composed command and returns metadata', async () => {
+test('layouts:run spawns wt via argv form (bypasses cmd.exe to preserve \\" escapes)', async () => {
+  // Regression: spawn(string, {shell:true}) routes through cmd.exe, which does
+  // NOT recognize \" as an escaped quote — it strips/mangles the wrapping that
+  // quoteArgvForWt adds. Result: wt receives a corrupted commandline and
+  // launches the wrapped string as if it were the executable name
+  // (CreateProcess error 0x80070002 "file not found"). Spawning argv-form
+  // bypasses cmd.exe so node's win32 escape produces CommandLineToArgvW-
+  // compatible output that wt's argv parser unparses correctly.
   const ipc = makeIpcStub()
-  const spawn = makeSpawnStub((cmd) => {
-    assert.match(cmd, /^wt(\.exe)? /)
+  const spawn = makeSpawnStub((cmd, args, opts) => {
+    assert.equal(cmd, 'wt', 'spawn cmd should be bare "wt", not a shell string')
+    assert.ok(Array.isArray(args), 'spawn args should be an argv array')
+    assert.ok(!opts || !opts.shell, 'shell:true mangles inner quotes — must be off')
     return { code: 0 }
   })
   ipcHandlers.register({
@@ -310,12 +319,23 @@ test('layouts:run spawns wt with composed command and returns metadata', async (
     spawn, store: makeMemoryStore(),
     getMainWindow: () => null, env: {},
   })
-  const layout = { name: 'L', tabs: [{ panes: [{ profile: 'PowerShell' }] }] }
+  const layout = {
+    name: 'L',
+    tabs: [{ panes: [{ profile: 'Windows PowerShell', command: 'npx paperclipai run' }] }],
+  }
   const res = await ipc.invoke('layouts:run', layout)
   assert.ok(Array.isArray(res.argv))
   assert.match(res.preview, /^wt/)
   assert.equal(res.pid, 4242)
   assert.equal(spawn.calls.length, 1)
+  // The pwsh-wrapped command must reach spawn as ONE argv element with quotes
+  // intact — not split, not mangled. node will then escape it correctly when
+  // building the win32 commandline for wt.
+  const passed = spawn.calls[0].args
+  assert.ok(
+    passed.includes('powershell -NoExit -Command "npx paperclipai run"'),
+    `expected wrapped command as single argv element, got: ${JSON.stringify(passed)}`,
+  )
 })
 
 test('config:get returns store data and nulls non-directory lastDir', async () => {

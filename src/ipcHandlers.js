@@ -287,7 +287,13 @@ function register(deps) {
     const defaultShellKind = await defaultShellKindFromSettings()
     const argv = buildWtArgv(effective, { defaultShellKind })
     const preview = buildWtCommand(effective, { defaultShellKind })
-    const child = spawn(preview, { shell: true, detached: true, stdio: 'ignore', windowsHide: true })
+    // Spawn argv-form (no shell:true) — cmd.exe does not understand the \"
+    // escapes that quoteArgvForWt emits, so routing through it corrupts the
+    // wrapped commandline and wt tries to launch the whole quoted blob as an
+    // exe (CreateProcess error 0x80070002). Calling spawn('wt', argv) lets
+    // node's win32 escape build CommandLineToArgvW-compatible output that wt
+    // unparses correctly.
+    const child = spawn('wt', argv, { detached: true, stdio: 'ignore', windowsHide: true })
     if (child && typeof child.unref === 'function') child.unref()
     return { argv, preview, pid: child && child.pid, style: applyResult }
   })
