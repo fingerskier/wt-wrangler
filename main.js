@@ -18,6 +18,7 @@ const { makeSession, restoreAll } = require('./src/wtStyleSession')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./src/wtFragments')
 const updater = require('./src/updater')
 const { classifyGitError } = require('./src/ghUpdate')
+const appSettings = require('./src/appSettings')
 
 const FRAGMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
@@ -306,6 +307,18 @@ ipcMain.handle('config:set', async (_e, patch) => {
   if (!patch || typeof patch !== 'object') return false
   await store.write(patch)
   return true
+})
+
+ipcMain.handle('appSettings:get', async () => {
+  const data = await store.read()
+  return { settings: appSettings.normalizeSettings(data), themes: appSettings.THEMES }
+})
+
+ipcMain.handle('appSettings:set', async (_e, patch) => {
+  const clean = appSettings.sanitizePatch(patch)
+  if (Object.keys(clean).length === 0) return { ok: true, settings: appSettings.normalizeSettings(await store.read()) }
+  await store.write(clean)
+  return { ok: true, settings: appSettings.normalizeSettings(await store.read()) }
 })
 
 ipcMain.handle('shell:reveal', async (_e, targetPath) => {

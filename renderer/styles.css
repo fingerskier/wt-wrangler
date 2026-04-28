@@ -47,6 +47,23 @@
   --stripe: 3px;
 }
 
+/* alt theme: graphite — cooler, lower chroma accents */
+html[data-theme="graphite"] {
+  --copper: #8896a4;
+  --copper-soft: #1f262d;
+  --brass: #a4adb6;
+  --brass-soft: #232730;
+  --patina: #6b8f9a;
+  --patina-soft: #1d272b;
+  --ember: #aab2bb;
+  --cobalt: #5e7aa2;
+}
+
+.settings-row { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; }
+.settings-row.inline { flex-direction: row; align-items: center; gap: 8px; }
+.settings-row select, .settings-row input[type="text"] { padding: 4px 6px; }
+.settings-hint { color: var(--ink-3); font-size: 11px; margin: 8px 0 0; }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 

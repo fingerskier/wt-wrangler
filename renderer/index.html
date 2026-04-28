@@ -13,6 +13,7 @@
         <span id="dirPath" class="muted" title="Click to save to root folder">(no folder)</span>
         <span id="saveHint" class="save-hint hidden"></span>
         <button id="ghUpdate" type="button" class="hidden" title="git add -A, commit, push">GH Update</button>
+        <button id="appSettingsBtn" type="button" title="App settings">⚙</button>
       </div>
     </header>
 
@@ -103,6 +104,37 @@
     </template>
 
     <div id="toast" class="toast hidden"></div>
+
+    <div id="appSettingsRoot" class="modal-root hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-app-settings-dismiss></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appSettingsTitle">
+        <header class="modal-head">
+          <h3 id="appSettingsTitle">App Settings</h3>
+          <button type="button" class="modal-close" data-app-settings-dismiss title="Close">×</button>
+        </header>
+        <div class="modal-body">
+          <label class="settings-row">Theme
+            <select data-setting="theme"></select>
+          </label>
+          <label class="settings-row">Default profile (used for new layouts)
+            <input type="text" data-setting="defaultProfile" placeholder="(none)" />
+          </label>
+          <label class="settings-row">Default save sub-folder
+            <input type="text" data-setting="defaultSaveSubdir" placeholder="(root)" />
+          </label>
+          <label class="settings-row inline">
+            <input type="checkbox" data-setting="confirmOnDelete" />
+            <span>Confirm before deleting layouts</span>
+          </label>
+          <p class="settings-hint">Sub-folder is relative to the open folder; it auto-selects on open if it exists.</p>
+        </div>
+        <footer class="modal-foot">
+          <span class="spacer"></span>
+          <button type="button" data-action="appSettingsCancel">Cancel</button>
+          <button type="button" data-action="appSettingsSave" class="primary">Save</button>
+        </footer>
+      </div>
+    </div>
 
     <div id="modalRoot" class="modal-root hidden" aria-hidden="true">
       <div class="modal-backdrop" data-modal-dismiss></div>

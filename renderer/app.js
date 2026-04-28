@@ -11,6 +11,8 @@ const state = {
   dirty: false,
   profiles: [],
   profileSource: null,
+  appSettings: { theme: 'workshop-plate', defaultProfile: null, defaultSaveSubdir: null, confirmOnDelete: true },
+  themes: ['workshop-plate'],
 }
 
 const history = window.History.create()
@@ -26,6 +28,8 @@ const el = {
   layoutList: document.getElementById('layoutList'),
   editor: document.getElementById('editor'),
   toast: document.getElementById('toast'),
+  appSettingsBtn: document.getElementById('appSettingsBtn'),
+  appSettingsRoot: document.getElementById('appSettingsRoot'),
 }
 
 function dirnameOf(p) {
@@ -69,6 +73,7 @@ function toast(msg, kind) {
 }
 
 function emptyLayout() {
+  const profile = (state.appSettings && state.appSettings.defaultProfile) || 'pwsh'
   return {
     name: 'new-layout',
     window: '',
@@ -76,7 +81,7 @@ function emptyLayout() {
     tabs: [
       {
         title: 'Tab 1',
-        panes: [{ profile: 'pwsh', dir: '', command: '' }],
+        panes: [{ profile, dir: '', command: '' }],
       },
     ],
   }
@@ -143,6 +148,11 @@ async function setLayoutsDir(dir) {
   updateSaveDirDisplay()
   updateGhButton()
   await refreshList()
+  autoSelectSaveSubdir()
+  if (state.saveDir !== state.dir) {
+    updateSaveDirDisplay()
+    renderList()
+  }
 }
 
 async function updateGhButton() {
@@ -895,7 +905,7 @@ async function deleteCurrent() {
     renderEditor()
     return
   }
-  if (!confirm(`Delete ${state.currentPath}?`)) return
+  if (state.appSettings.confirmOnDelete && !confirm(`Delete ${state.currentPath}?`)) return
   try {
     await window.wt.remove(state.currentPath)
     state.currentPath = null
@@ -1277,8 +1287,93 @@ document.addEventListener('contextmenu', (e) => {
   if (!e.target.closest('.layout-list li')) hideContextMenu()
 }, true)
 
+async function loadAppSettings() {
+  try {
+    const res = await window.wt.appSettingsGet()
+    if (res && res.settings) {
+      state.appSettings = res.settings
+      if (Array.isArray(res.themes) && res.themes.length) state.themes = res.themes
+    }
+  } catch (err) {
+    console.warn('appSettings load failed:', err)
+  }
+  applyTheme()
+}
+
+function applyTheme() {
+  const t = (state.appSettings && state.appSettings.theme) || 'workshop-plate'
+  document.documentElement.dataset.theme = t
+}
+
+function autoSelectSaveSubdir() {
+  const sub = state.appSettings && state.appSettings.defaultSaveSubdir
+  if (!sub || !state.dir) return
+  const entries = state.children.get(state.dir) || []
+  const match = entries.find(e => e.type === 'dir' && e.name === sub)
+  if (match) {
+    state.saveDir = match.path
+    if (!state.expanded.has(match.path)) state.expanded.add(match.path)
+    updateSaveDirDisplay()
+  }
+}
+
+function openAppSettings() {
+  const root = el.appSettingsRoot
+  if (!root) return
+  const themeSel = root.querySelector('[data-setting="theme"]')
+  themeSel.innerHTML = ''
+  for (const t of state.themes) {
+    const opt = document.createElement('option')
+    opt.value = t
+    opt.textContent = t
+    if (t === state.appSettings.theme) opt.selected = true
+    themeSel.appendChild(opt)
+  }
+  root.querySelector('[data-setting="defaultProfile"]').value = state.appSettings.defaultProfile || ''
+  root.querySelector('[data-setting="defaultSaveSubdir"]').value = state.appSettings.defaultSaveSubdir || ''
+  root.querySelector('[data-setting="confirmOnDelete"]').checked = !!state.appSettings.confirmOnDelete
+  root.classList.remove('hidden')
+  root.setAttribute('aria-hidden', 'false')
+}
+
+function closeAppSettings() {
+  if (!el.appSettingsRoot) return
+  el.appSettingsRoot.classList.add('hidden')
+  el.appSettingsRoot.setAttribute('aria-hidden', 'true')
+}
+
+async function saveAppSettings() {
+  const root = el.appSettingsRoot
+  const patch = {
+    theme: root.querySelector('[data-setting="theme"]').value || null,
+    defaultProfile: (root.querySelector('[data-setting="defaultProfile"]').value || '').trim() || null,
+    defaultSaveSubdir: (root.querySelector('[data-setting="defaultSaveSubdir"]').value || '').trim() || null,
+    confirmOnDelete: !!root.querySelector('[data-setting="confirmOnDelete"]').checked,
+  }
+  try {
+    const res = await window.wt.appSettingsSet(patch)
+    if (res && res.settings) {
+      state.appSettings = res.settings
+      applyTheme()
+      toast('Settings saved', 'success')
+      autoSelectSaveSubdir()
+      renderList()
+    }
+    closeAppSettings()
+  } catch (err) {
+    toast('Save failed: ' + err.message, 'error')
+  }
+}
+
+if (el.appSettingsBtn) el.appSettingsBtn.addEventListener('click', openAppSettings)
+if (el.appSettingsRoot) {
+  el.appSettingsRoot.querySelectorAll('[data-app-settings-dismiss]').forEach(n => n.addEventListener('click', closeAppSettings))
+  el.appSettingsRoot.querySelector('[data-action="appSettingsCancel"]').addEventListener('click', closeAppSettings)
+  el.appSettingsRoot.querySelector('[data-action="appSettingsSave"]').addEventListener('click', saveAppSettings)
+}
+
 loadProfiles()
-restoreLastDir()
+loadAppSettings().then(restoreLastDir)
 
 window.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey
