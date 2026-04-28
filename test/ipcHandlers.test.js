@@ -485,6 +485,28 @@ test('gh:update classifies auth failure on push', async (t) => {
   assert.equal(res.errorClass, 'auth')
 })
 
+test('gh:update sets GIT_TERMINAL_PROMPT=0 on every git child', async (t) => {
+  const dir = await tmpdir()
+  t.after(() => realFs.rm(dir, { recursive: true, force: true }))
+  await realFs.mkdir(path.join(dir, '.git'))
+  const ipc = makeIpcStub()
+  const spawn = makeSpawnStub((_cmd, _args) => ({ code: 0, stdout: '', stderr: '' }))
+  ipcHandlers.register({
+    ipcMain: ipc, dialog: {}, shell: {}, fs: realFs, fsSync: realFsSync,
+    spawn, store: makeMemoryStore(),
+    getMainWindow: () => null, env: { PATH: '/x' },
+  })
+  const res = await ipc.invoke('gh:update', dir)
+  assert.equal(res.ok, true)
+  // All three git children (add, commit, push) must have terminal prompts disabled
+  // so a missing credential helper fails fast (within seconds via the existing auth
+  // classifier) instead of waiting for the 30s timeout.
+  for (const c of spawn.calls) {
+    assert.equal(c.opts.env && c.opts.env.GIT_TERMINAL_PROMPT, '0',
+      `expected GIT_TERMINAL_PROMPT=0 on ${c.args[0]}`)
+  }
+})
+
 test('gh:update reports timeout errorClass when git push hangs', async (t) => {
   const dir = await tmpdir()
   t.after(() => realFs.rm(dir, { recursive: true, force: true }))

@@ -155,3 +155,27 @@ test('accepts a sensible default timeout when none passed', async () => {
   //  sequence by spying; here we just confirm runGit doesn't throw without
   //  an explicit timeout.)
 })
+
+// --- env forwarding (so callers can disable interactive prompts) -----------
+
+test('forwards env override to spawn opts when provided', async () => {
+  const t = fakeTimers()
+  const { spawn, calls } = fakeSpawn({
+    onSpawn: (child) => child.emit('close', 0),
+  })
+  const env = { PATH: '/x', GIT_TERMINAL_PROMPT: '0' }
+  await runGit({ spawn, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout },
+    ['push'], '/d', 30000, env)
+  assert.deepEqual(calls[0].opts.env, env, 'spawn opts.env must be forwarded verbatim')
+})
+
+test('omits env from spawn opts when caller passes nothing', async () => {
+  const t = fakeTimers()
+  const { spawn, calls } = fakeSpawn({
+    onSpawn: (child) => child.emit('close', 0),
+  })
+  await runGit({ spawn, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout },
+    ['status'], '/d', 30000)
+  // env undefined → spawn inherits parent env (existing behavior preserved).
+  assert.equal(calls[0].opts.env, undefined)
+})

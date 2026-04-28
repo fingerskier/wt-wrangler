@@ -10,11 +10,15 @@ const DEFAULT_TIMEOUT_MS = 30000
 // Deps are injected so the timeout path is unit-testable without burning
 // real wall-clock time. Production wires {spawn: child_process.spawn,
 // setTimeout, clearTimeout}.
-function runGit(deps, args, cwd, timeoutMs) {
+function runGit(deps, args, cwd, timeoutMs, env) {
   const { spawn, setTimeout: setTO, clearTimeout: clearTO } = deps
   const ms = typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS
+  // Only attach env when caller actually passed something — undefined preserves
+  // the existing behavior (child inherits the parent process env).
+  const opts = { cwd, windowsHide: true }
+  if (env !== undefined) opts.env = env
   return new Promise((resolve) => {
-    const child = spawn('git', args, { cwd, windowsHide: true })
+    const child = spawn('git', args, opts)
     let stdout = ''
     let stderr = ''
     let settled = false

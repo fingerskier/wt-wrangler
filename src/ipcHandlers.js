@@ -151,7 +151,13 @@ function register(deps) {
   }
 
   function runGit(args, cwd) {
-    return runGitPure({ spawn, setTimeout, clearTimeout }, args, cwd)
+    // GIT_TERMINAL_PROMPT=0 keeps git from blocking on a credential prompt or
+    // SSH passphrase popup. Without it, a missing/expired token would wait the
+    // full 30s timeout; with it, git emits "terminal prompts disabled" right
+    // away — the existing auth classifier (ghUpdate.AUTH_PATTERNS) picks that
+    // up and the user gets actionable feedback in <1s instead of 30s.
+    const childEnv = { ...env, GIT_TERMINAL_PROMPT: '0' }
+    return runGitPure({ spawn, setTimeout, clearTimeout }, args, cwd, undefined, childEnv)
   }
 
   function gitFail(step, result) {
