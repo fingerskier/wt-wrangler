@@ -17,8 +17,8 @@ After shipping the original top-10, an audit of `src/layoutSchema.js`, `src/wtCo
 - `pane.postDelay` < 0 — would previously be passed straight to `Start-Sleep -Seconds` / `sleep`, breaking the post-command chain.
 Zero `postDelay` is still accepted silently (legitimate "no delay" case). 6 new tests in `test/layoutSchema.test.js`; suite 249 → 255 green.
 
-### R2.2 GitHub Actions workflow running `npm test` on push + PR
-No CI exists. Suite is 249 tests / ~350ms — perfect for a one-job `windows-latest` workflow. Catches future regressions without the user having to remember to run `npm test`.
+### R2.2 ~~GitHub Actions workflow running `npm test` on push + PR~~ — DONE 2026-04-28
+**Status: DONE.** New workflow at `.github/workflows/test.yml`: `runs-on: windows-latest` (matches the wt.exe runtime constraint), triggers on push + pull_request to `main`, uses `actions/checkout@v4` and `actions/setup-node@v4` (Node 20 + npm cache), installs via `npm ci`, runs `npm test`. New `test/ciWorkflow.test.js` (9 contract tests) parses the YAML and asserts every required line is present so accidental edits to the workflow are caught locally before push. Suite 255 → 264 green.
 
 ### R2.3 README staleness audit
 - "`npm test` runs the command-builder unit tests" — now 14 modules covered.
