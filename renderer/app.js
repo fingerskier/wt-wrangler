@@ -907,17 +907,7 @@ async function runCurrent() {
     }
     const serialized = serializeLayout()
     const res = await window.wt.run(serialized)
-    const style = res && res.style
-    if (style && Array.isArray(style.warnings) && style.warnings.length) {
-      for (const w of style.warnings) toast('Style: ' + w, 'error')
-    } else if (style && (style.applied?.profile || style.applied?.window)) {
-      const parts = []
-      if (style.applied.profile) parts.push('profile fragment')
-      if (style.applied.window) parts.push('window settings')
-      toast(`Style applied (${parts.join(' + ')}). Launching…`, 'success')
-    } else {
-      toast('Launching Windows Terminal…', 'success')
-    }
+    for (const t of window.RunToast.interpretRunToast(res)) toast(t.message, t.kind)
   } catch (err) {
     toast('Run failed: ' + err.message, 'error')
   }
