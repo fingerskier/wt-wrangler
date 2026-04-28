@@ -17,6 +17,7 @@ const { listEntries, moveLayoutFile } = require('./src/layouts')
 const { makeSession, restoreAll } = require('./src/wtStyleSession')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./src/wtFragments')
 const updater = require('./src/updater')
+const { classifyGitError } = require('./src/ghUpdate')
 
 const FRAGMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
@@ -341,16 +342,21 @@ function runGit(args, cwd) {
 
 ipcMain.handle('git:isRepo', async (_e, dir) => isGitRepo(dir))
 
+function gitFail(step, stderr, stdout) {
+  const c = classifyGitError(stderr, stdout, step)
+  return { ok: false, step, error: c.message, errorClass: c.class, raw: (stderr || stdout || '').trim() }
+}
+
 ipcMain.handle('gh:update', async (_e, dir) => {
-  if (!await isGitRepo(dir)) return { ok: false, step: 'check', error: 'Not a git repository' }
+  if (!await isGitRepo(dir)) return { ok: false, step: 'check', error: 'Not a git repository', errorClass: 'unknown' }
   const add = await runGit(['add', '-A'], dir)
-  if (add.code !== 0) return { ok: false, step: 'add', error: (add.stderr || add.stdout).trim() }
+  if (add.code !== 0) return gitFail('add', add.stderr, add.stdout)
   const msg = `Wrangler update ${new Date().toISOString()}`
   const commit = await runGit(['commit', '-m', msg], dir)
   const nothing = commit.code !== 0 && /nothing to commit|no changes added/i.test(commit.stdout + commit.stderr)
-  if (commit.code !== 0 && !nothing) return { ok: false, step: 'commit', error: (commit.stderr || commit.stdout).trim() }
+  if (commit.code !== 0 && !nothing) return gitFail('commit', commit.stderr, commit.stdout)
   const push = await runGit(['push'], dir)
-  if (push.code !== 0) return { ok: false, step: 'push', error: (push.stderr || push.stdout).trim() }
+  if (push.code !== 0) return gitFail('push', push.stderr, push.stdout)
   return { ok: true, committed: !nothing, message: msg }
 })
 

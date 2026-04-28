@@ -169,6 +169,9 @@ async function ghUpdateAction() {
       const step = res && res.step ? `[${res.step}] ` : ''
       const msg = res && res.error ? res.error : 'Unknown error'
       toast(`GH update failed: ${step}${msg}`, 'error')
+      if (res && res.errorClass && res.errorClass !== 'unknown' && res.raw) {
+        console.warn('[gh:update] raw:', res.raw)
+      }
     }
   } catch (err) {
     toast('GH update failed: ' + (err.message || err), 'error')
