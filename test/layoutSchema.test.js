@@ -197,3 +197,71 @@ test('validateLayout: pane.split valid values are right/left/down/up', () => {
     assert.equal(ok(data).warnings.length, 0, `split=${split} no warnings`)
   }
 })
+
+// --- R2.1: tighten validation -------------------------------------------------
+
+test('validateLayout: warns when panes[0] (tab root) carries a split field', () => {
+  const data = {
+    name: 'x',
+    tabs: [{ panes: [{ split: 'right', profile: 'pwsh' }, { split: 'down', profile: 'pwsh' }] }],
+  }
+  const r = ok(data)
+  assert.equal(r.ok, true)
+  const w = r.warnings.find(s => /panes\[0\].*split/i.test(s) && /tab root/i.test(s))
+  assert.ok(w, `expected warning about root pane split, got: ${JSON.stringify(r.warnings)}`)
+})
+
+test('validateLayout: warns when panes[1+] is missing split field', () => {
+  const data = {
+    name: 'x',
+    tabs: [{ panes: [{ profile: 'pwsh' }, { profile: 'pwsh' /* no split */ }] }],
+  }
+  const r = ok(data)
+  assert.equal(r.ok, true)
+  const w = r.warnings.find(s => /panes\[1\].*split/i.test(s) && /missing|required/i.test(s))
+  assert.ok(w, `expected warning about missing split, got: ${JSON.stringify(r.warnings)}`)
+})
+
+test('validateLayout: warns when pane.postDelay is negative', () => {
+  const data = {
+    name: 'x',
+    tabs: [{ panes: [{ profile: 'pwsh', postCommand: 'echo done', postDelay: -1 }] }],
+  }
+  const r = ok(data)
+  assert.equal(r.ok, true)
+  const w = r.warnings.find(s => /postDelay/.test(s) && /negative|>=\s*0|non-negative/i.test(s))
+  assert.ok(w, `expected warning about negative postDelay, got: ${JSON.stringify(r.warnings)}`)
+})
+
+test('validateLayout: warns when pane.postDelay is zero (treated as no-delay; almost certainly a mistake when paired with postCommand)', () => {
+  // Zero is technically valid (no delay) — accept silently. This test pins the boundary.
+  const data = {
+    name: 'x',
+    tabs: [{ panes: [{ profile: 'pwsh', postCommand: 'echo', postDelay: 0 }] }],
+  }
+  const r = ok(data)
+  assert.equal(r.ok, true)
+  const w = r.warnings.find(s => /postDelay/.test(s))
+  assert.ok(!w, `postDelay=0 should not warn, got: ${JSON.stringify(r.warnings)}`)
+})
+
+test('validateLayout: panes[0] without split is correct (no warning)', () => {
+  const data = {
+    name: 'x',
+    tabs: [{ panes: [{ profile: 'pwsh' }, { split: 'right', profile: 'pwsh' }] }],
+  }
+  const r = ok(data)
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.warnings, [])
+})
+
+test('validateLayout: positive postDelay is fine', () => {
+  const data = {
+    name: 'x',
+    tabs: [{ panes: [{ profile: 'pwsh', postCommand: 'echo', postDelay: 3 }] }],
+  }
+  const r = ok(data)
+  assert.equal(r.ok, true)
+  const w = r.warnings.find(s => /postDelay/.test(s))
+  assert.ok(!w, `positive postDelay should not warn, got: ${JSON.stringify(r.warnings)}`)
+})

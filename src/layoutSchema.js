@@ -53,8 +53,16 @@ function validateLayout(data) {
       if (!isPlainObject(pane)) {
         return fail(`tabs[${ti}].panes[${pi}] must be an object`)
       }
-      if (Object.hasOwn(pane, 'split')) {
-        if (!VALID_SPLITS.includes(pane.split)) {
+      const hasSplit = Object.hasOwn(pane, 'split') && pane.split !== null && pane.split !== undefined && pane.split !== ''
+      if (pi === 0) {
+        // wt builds panes[0] as `new-tab`, not `split-pane`; a split flag on the tab root is silently dropped.
+        if (hasSplit) {
+          warnings.push(`tabs[${ti}].panes[0].split is ignored — tab root opens via new-tab; remove the split field`)
+        }
+      } else {
+        if (!hasSplit) {
+          warnings.push(`tabs[${ti}].panes[${pi}].split is missing — defaults to vertical (down); set explicitly to right/left/down/up`)
+        } else if (!VALID_SPLITS.includes(pane.split)) {
           warnings.push(`tabs[${ti}].panes[${pi}].split must be one of ${VALID_SPLITS.join('/')} (got ${JSON.stringify(pane.split)})`)
         }
       }
@@ -75,6 +83,8 @@ function validateLayout(data) {
         const d = pane.postDelay
         if (typeof d !== 'number' || !Number.isFinite(d)) {
           warnings.push(`tabs[${ti}].panes[${pi}].postDelay must be a finite number`)
+        } else if (d < 0) {
+          warnings.push(`tabs[${ti}].panes[${pi}].postDelay must be non-negative (got ${d})`)
         }
       }
     }

@@ -2,7 +2,29 @@
 
 Generated 2026-04-27 from Reqall (project #2045 fingerskier/wt-wrangler), GitHub issues (none open), and local docs (README.md + main.js review). Ranked by impact × leverage; pending items only — shipped specs excluded.
 
-**All 10 items DONE as of 2026-04-28.** Backlog clear; regenerate from Reqall for next batch.
+**All 10 items DONE as of 2026-04-28.** Backlog clear.
+
+---
+
+## Round 2 — top 3 (regenerated 2026-04-28 from code audit)
+
+After shipping the original top-10, an audit of `src/layoutSchema.js`, `src/wtCommand.js`, and `README.md` surfaced three new high-leverage gaps:
+
+### R2.1 ~~Tighten layoutSchema validation~~ — DONE 2026-04-28
+**Status: DONE.** `validateLayout` now warns on three previously-silent misconfigurations:
+- `panes[0]` (tab root) carrying a `split` field — wt builds the tab via `new-tab`, so the split flag is silently dropped at runtime.
+- `panes[1+]` *without* a `split` field — schema previously tolerated this; wt falls back to vertical (down) which is rarely the user's intent.
+- `pane.postDelay` < 0 — would previously be passed straight to `Start-Sleep -Seconds` / `sleep`, breaking the post-command chain.
+Zero `postDelay` is still accepted silently (legitimate "no delay" case). 6 new tests in `test/layoutSchema.test.js`; suite 249 → 255 green.
+
+### R2.2 GitHub Actions workflow running `npm test` on push + PR
+No CI exists. Suite is 249 tests / ~350ms — perfect for a one-job `windows-latest` workflow. Catches future regressions without the user having to remember to run `npm test`.
+
+### R2.3 README staleness audit
+- "`npm test` runs the command-builder unit tests" — now 14 modules covered.
+- "the process is spawned as `spawn(cmdString, …)` in `main.js`" — that code lives in `src/ipcHandlers.js` now (post TODO #10).
+
+---
 
 ## 1. ~~Revert WT settings.json window-style patches after launch~~ — DONE 2026-04-27
 **Status: DONE.** Implemented via `src/wtStyleSession.js` (pure in-memory tracker; first pre-patch content per path is preserved as the snapshot) wired into `main.js`: `applyStyleForLaunch` records the original `settings.json` raw content before the first window-style patch of the session, and `app.on('will-quit')` restores all pending snapshots before the app exits. 9 new node:test cases (`test/wtStyleSession.test.js`); full suite 93/93 green. Failed restores stay pending so a retry-on-next-quit can pick them up. Disk backup (`.wtw-backup-<stamp>`) is retained as a paranoid safety net.
