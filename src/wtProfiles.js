@@ -78,19 +78,33 @@ function readProfilesFromFile(filePath) {
   return extractProfileNames(parseJsonc(raw))
 }
 
-function discoverProfiles() {
-  for (const candidate of candidateSettingsPaths()) {
+function _withCandidates(candidates) {
+  let lastError = null
+  let sawAnyFile = false
+  for (const candidate of candidates) {
     try {
       if (!fs.existsSync(candidate)) continue
+      sawAnyFile = true
       const names = readProfilesFromFile(candidate)
-      if (names.length) return { source: candidate, profiles: names }
-    } catch (_) {}
+      if (names.length) return { source: candidate, profiles: names, fallback: false }
+      lastError = `${candidate}: parsed but contained no profiles`
+    } catch (err) {
+      lastError = `${candidate}: ${err && err.message ? err.message : String(err)}`
+    }
   }
-  return { source: null, profiles: DEFAULT_FALLBACK.slice() }
+  const error = lastError || (sawAnyFile
+    ? 'Windows Terminal settings.json found but unreadable'
+    : 'no settings.json found in any known location')
+  return { source: null, profiles: DEFAULT_FALLBACK.slice(), fallback: true, error }
+}
+
+function discoverProfiles() {
+  return _withCandidates(candidateSettingsPaths())
 }
 
 module.exports = {
   discoverProfiles,
+  _withCandidates,
   readProfilesFromFile,
   extractProfileNames,
   parseJsonc,

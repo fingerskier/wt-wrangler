@@ -11,6 +11,8 @@ const state = {
   dirty: false,
   profiles: [],
   profileSource: null,
+  profileFallback: false,
+  profileError: null,
   appSettings: { theme: 'workshop-plate', defaultProfile: null, defaultSaveSubdir: null, confirmOnDelete: true },
   themes: ['workshop-plate'],
 }
@@ -961,10 +963,30 @@ async function loadProfiles() {
     const res = await window.wt.profiles()
     state.profiles = Array.isArray(res.profiles) ? res.profiles : []
     state.profileSource = res.source || null
+    state.profileFallback = !!res.fallback
+    state.profileError = res.error || null
     renderProfileOptions()
+    refreshProfileWarning()
   } catch (err) {
     console.warn('profile discovery failed:', err)
+    state.profileFallback = true
+    state.profileError = String(err.message || err)
+    refreshProfileWarning()
   }
+}
+
+function refreshProfileWarning() {
+  const editor = el.editor
+  if (!editor) return
+  editor.querySelectorAll('.profile-warn').forEach(n => n.remove())
+  if (!state.profileFallback) return
+  editor.querySelectorAll('select[data-field="profile"]').forEach(sel => {
+    const span = document.createElement('span')
+    span.className = 'profile-warn'
+    span.textContent = '⚠️'
+    span.title = `Using fallback profile list — ${state.profileError || 'WT settings.json could not be loaded'}`
+    sel.parentNode.insertBefore(span, sel.nextSibling)
+  })
 }
 
 function populateProfileSelect(sel, currentValue) {
@@ -992,6 +1014,7 @@ function renderProfileOptions() {
   el.editor.querySelectorAll('select[data-field="profile"]').forEach(sel => {
     populateProfileSelect(sel, sel.value)
   })
+  refreshProfileWarning()
 }
 
 el.pickDir.addEventListener('click', pickDir)
