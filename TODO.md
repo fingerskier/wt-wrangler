@@ -32,6 +32,13 @@ New `test/readme.test.js` (7 cases) pins README contract: forbids both stale phr
 
 ---
 
+## Round 3 — top 1 (regenerated 2026-04-28)
+
+### R3.1 ~~layouts:saveNew silently overwrites existing files~~ — DONE 2026-04-28
+**Status: DONE.** New pure helper `availableLayoutFile(dirPath, baseName)` in `src/layouts.js`: reads dir once, lower-cases all names (handles case-insensitive Windows FS — asking for `foo` when `FOO.json` exists still suffixes), and walks `<base>.json`, `<base>_1.json`, `<base>_2.json`, … returning the first free slot. Bounded at 1000 attempts. `ipcHandlers::layouts:saveNew` now calls the helper instead of building the path inline. 5 new tests in `test/layouts.test.js` (basic, _1, _2, gap-filling, case-insensitivity) + 1 collision test in `test/ipcHandlers.test.js` asserting the original file's content survives untouched. Suite 271 → 277 green.
+
+---
+
 ## 1. ~~Revert WT settings.json window-style patches after launch~~ — DONE 2026-04-27
 **Status: DONE.** Implemented via `src/wtStyleSession.js` (pure in-memory tracker; first pre-patch content per path is preserved as the snapshot) wired into `main.js`: `applyStyleForLaunch` records the original `settings.json` raw content before the first window-style patch of the session, and `app.on('will-quit')` restores all pending snapshots before the app exits. 9 new node:test cases (`test/wtStyleSession.test.js`); full suite 93/93 green. Failed restores stay pending so a retry-on-next-quit can pick them up. Disk backup (`.wtw-backup-<stamp>`) is retained as a paranoid safety net.
 

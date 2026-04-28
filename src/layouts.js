@@ -50,4 +50,23 @@ async function moveLayoutFile(srcPath, destDir) {
   return target
 }
 
-module.exports = { listEntries, moveLayoutFile }
+async function availableLayoutFile(dirPath, baseName) {
+  // List dir once and lower-case-compare so case-insensitive Windows filesystems
+  // are handled correctly: asking for 'foo' when 'FOO.json' exists should still
+  // suffix, otherwise writing 'foo.json' would clobber FOO.json.
+  let names
+  try {
+    names = await fs.readdir(dirPath)
+  } catch (_) {
+    names = []
+  }
+  const taken = new Set(names.map(n => n.toLowerCase()))
+  const candidate = (suffix) => suffix === 0 ? `${baseName}.json` : `${baseName}_${suffix}.json`
+  for (let i = 0; i < 1000; i++) {
+    const name = candidate(i)
+    if (!taken.has(name.toLowerCase())) return path.join(dirPath, name)
+  }
+  throw new Error(`could not find available filename for "${baseName}" after 1000 attempts`)
+}
+
+module.exports = { listEntries, moveLayoutFile, availableLayoutFile }

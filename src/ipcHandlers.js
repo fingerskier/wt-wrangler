@@ -4,7 +4,7 @@ const path = require('node:path')
 const { buildWtArgv, buildWtCommand } = require('./wtCommand')
 const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./wtProfiles')
 const styleApply = require('./wtStyleApply')
-const { listEntries, moveLayoutFile } = require('./layouts')
+const { listEntries, moveLayoutFile, availableLayoutFile } = require('./layouts')
 const { validateLayout } = require('./layoutSchema')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./wtFragments')
 const { classifyGitError } = require('./ghUpdate')
@@ -233,7 +233,7 @@ function register(deps) {
 
   ipcMain.handle('layouts:saveNew', async (_e, dirPath, suggestedName, layout) => {
     const safe = (suggestedName || layout.name || 'layout').replace(/[^A-Za-z0-9_\-]/g, '_')
-    const target = path.join(dirPath, `${safe}.json`)
+    const target = await availableLayoutFile(dirPath, safe)
     await fs.writeFile(target, JSON.stringify(layout, null, 2), 'utf8')
     return target
   })

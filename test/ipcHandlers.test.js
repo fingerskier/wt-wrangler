@@ -182,6 +182,27 @@ test('layouts:saveNew sanitizes filename and writes', async (t) => {
   assert.ok(exists)
 })
 
+test('layouts:saveNew auto-suffixes on collision instead of overwriting', async (t) => {
+  const dir = await tmpdir()
+  t.after(() => realFs.rm(dir, { recursive: true, force: true }))
+  // Pre-existing layout the user must not lose.
+  await realFs.writeFile(path.join(dir, 'mine.json'), JSON.stringify({ original: true, tabs: [{ panes: [{}] }] }), 'utf8')
+  const ipc = makeIpcStub()
+  ipcHandlers.register({
+    ipcMain: ipc, dialog: {}, shell: {}, fs: realFs, fsSync: realFsSync,
+    spawn: makeSpawnStub([]), store: makeMemoryStore(),
+    getMainWindow: () => null, env: {},
+  })
+  const layout = { name: 'Mine', tabs: [{ panes: [{ profile: 'P' }] }] }
+  const target = await ipc.invoke('layouts:saveNew', dir, 'mine', layout)
+  // New file must NOT be mine.json (that would clobber).
+  assert.notEqual(path.basename(target), 'mine.json')
+  assert.match(path.basename(target), /^mine_1\.json$/)
+  // Original survived.
+  const orig = JSON.parse(await realFs.readFile(path.join(dir, 'mine.json'), 'utf8'))
+  assert.equal(orig.original, true)
+})
+
 test('layouts:delete unlinks the file', async (t) => {
   const dir = await tmpdir()
   t.after(() => realFs.rm(dir, { recursive: true, force: true }))

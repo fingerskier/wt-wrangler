@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { listEntries, moveLayoutFile } = require('../src/layouts')
+const { listEntries, moveLayoutFile, availableLayoutFile } = require('../src/layouts')
 
 async function mkTmp() {
   return fsp.mkdtemp(path.join(os.tmpdir(), 'wtw-layouts-'))
@@ -79,4 +79,46 @@ test('moveLayoutFile throws on filename collision', async () => {
   await fsp.writeFile(path.join(sub, 'x.json'), '{"a":2}')
   await assert.rejects(moveLayoutFile(src, sub), /Destination already has x\.json/)
   assert.ok((await fsp.stat(src)).isFile())
+})
+
+// --- R3.1: availableLayoutFile collision-safe naming -------------------------
+
+test('availableLayoutFile returns base name when no collision', async () => {
+  const dir = await mkTmp()
+  const out = await availableLayoutFile(dir, 'foo')
+  assert.equal(path.basename(out), 'foo.json')
+  assert.equal(path.dirname(out), dir)
+})
+
+test('availableLayoutFile suffixes _1 when foo.json exists', async () => {
+  const dir = await mkTmp()
+  await fsp.writeFile(path.join(dir, 'foo.json'), '{}')
+  const out = await availableLayoutFile(dir, 'foo')
+  assert.equal(path.basename(out), 'foo_1.json')
+})
+
+test('availableLayoutFile suffixes _2 when foo.json + foo_1.json exist', async () => {
+  const dir = await mkTmp()
+  await fsp.writeFile(path.join(dir, 'foo.json'), '{}')
+  await fsp.writeFile(path.join(dir, 'foo_1.json'), '{}')
+  const out = await availableLayoutFile(dir, 'foo')
+  assert.equal(path.basename(out), 'foo_2.json')
+})
+
+test('availableLayoutFile skips gaps and finds first available', async () => {
+  // foo.json, foo_2.json exist but foo_1.json is free → returns foo_1.json
+  const dir = await mkTmp()
+  await fsp.writeFile(path.join(dir, 'foo.json'), '{}')
+  await fsp.writeFile(path.join(dir, 'foo_2.json'), '{}')
+  const out = await availableLayoutFile(dir, 'foo')
+  assert.equal(path.basename(out), 'foo_1.json')
+})
+
+test('availableLayoutFile is case-insensitive on Windows-style FS', async () => {
+  // Even if the existing file is FOO.json, asking for 'foo' should still suffix
+  // because Windows filesystems are case-insensitive and writing 'foo.json' would clobber.
+  const dir = await mkTmp()
+  await fsp.writeFile(path.join(dir, 'FOO.json'), '{}')
+  const out = await availableLayoutFile(dir, 'foo')
+  assert.notEqual(path.basename(out).toLowerCase(), 'foo.json')
 })
