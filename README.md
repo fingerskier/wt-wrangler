@@ -18,6 +18,18 @@ App branding (name, window icon, taskbar icon, installer icon, Squirrel install 
 derived from `asset/logo.png`. The derived `asset/logo.ico` and `asset/logo-setup.gif` are
 gitignored — the `prepackage` / `premake` npm hooks rebuild them from the PNG before Forge runs.
 
+## Auto-update + code signing (optional)
+Wrangler is Squirrel.Windows-only. Both auto-update and Authenticode signing are opt-in via env vars — the build produces an unsigned, no-update installer when these are unset.
+
+Auto-update (runtime, in `main.js`):
+- `WRANGLER_UPDATE_URL` — Squirrel feed URL (e.g. `https://example.com/updates/wrangler/`). When set and the app is packaged on win32, `electron`'s `autoUpdater.setFeedURL(...)` is called and `checkForUpdates()` fires once after a 5s delay.
+
+Code signing (build-time, in `forge.config.js`):
+- `WRANGLER_SIGN_PARAMS` — raw signtool argv (most flexible; supports HSMs, `/sm /n "CN=..."` flows).
+- `WRANGLER_CERT_FILE` (+ `WRANGLER_CERT_PASSWORD`) — `.pfx` file path with optional password.
+
+When both are set, `WRANGLER_SIGN_PARAMS` wins. With neither, `npm run make` produces an unsigned installer (SmartScreen warning on launch).
+
 ## Features
 * Create and edit terminal layouts as JSON files
 * Load a layout using Windows Terminal (spawns `wt.exe`)

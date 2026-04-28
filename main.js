@@ -16,6 +16,7 @@ const { makeStore } = require('./src/config')
 const { listEntries, moveLayoutFile } = require('./src/layouts')
 const { makeSession, restoreAll } = require('./src/wtStyleSession')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./src/wtFragments')
+const updater = require('./src/updater')
 
 const FRAGMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
@@ -50,6 +51,19 @@ app.whenReady().then(() => {
   // Drop stale fragment files from prior sessions (older than FRAGMENT_MAX_AGE_MS).
   // Fire-and-forget — sweep failure should never block app startup.
   sweepStaleFragments().catch(() => {})
+  // Squirrel.Windows auto-update — only fires when packaged on win32 with WRANGLER_UPDATE_URL set.
+  try {
+    const { autoUpdater } = require('electron')
+    updater.maybeCheckForUpdates({
+      feedURL: updater.getFeedURL(process.env),
+      autoUpdater,
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      schedule: setTimeout,
+    })
+  } catch (_) {
+    // autoUpdater unavailable on non-win32 builds — already gated by maybeCheckForUpdates.
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
