@@ -704,6 +704,28 @@ select {
 .toast.error { border-left-color: var(--rust); background: linear-gradient(180deg, var(--plate-3), var(--rust-soft)); color: #ffd6ce; }
 .toast.success { border-left-color: var(--patina); background: linear-gradient(180deg, var(--plate-3), var(--patina-soft)); color: #c8e4d5; }
 
+.restore-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, var(--plate-3), var(--ember));
+  border: 1px solid var(--seam);
+  border-left: 3px solid var(--ember);
+  padding: 8px 14px;
+  border-radius: 2px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  z-index: 1500;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+}
+.restore-banner.hidden { display: none; }
+.restore-banner .restore-msg { color: var(--ink); }
+
 /* ─── context menu ─────────────────────────────────────────── */
 .ctx-menu {
   position: fixed;

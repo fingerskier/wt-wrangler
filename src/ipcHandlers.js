@@ -1,9 +1,10 @@
 'use strict'
 
 const path = require('node:path')
-const { buildWtArgv, buildWtCommand } = require('./wtCommand')
+const { buildWtArgv, buildWtCommand, profileKind } = require('./wtCommand')
 const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./wtProfiles')
 const styleApply = require('./wtStyleApply')
+const startupRestore = require('./wtStartupRestore')
 const { listEntries, moveLayoutFile, saveLayoutFile, saveNewLayoutFile } = require('./layouts')
 const { validateLayout } = require('./layoutSchema')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./wtFragments')
@@ -259,6 +260,16 @@ function register(deps) {
     }
   })
 
+  async function defaultShellKindFromSettings() {
+    try {
+      const data = await store.read()
+      const dp = data && typeof data.defaultProfile === 'string' ? data.defaultProfile : ''
+      return profileKind(dp) || null
+    } catch (_) {
+      return null
+    }
+  }
+
   ipcMain.handle('layouts:run', async (_e, layout) => {
     let effective = layout
     let applyResult = null
@@ -273,15 +284,17 @@ function register(deps) {
     } catch (err) {
       applyResult = { error: err.message || String(err) }
     }
-    const argv = buildWtArgv(effective)
-    const preview = buildWtCommand(effective)
+    const defaultShellKind = await defaultShellKindFromSettings()
+    const argv = buildWtArgv(effective, { defaultShellKind })
+    const preview = buildWtCommand(effective, { defaultShellKind })
     const child = spawn(preview, { shell: true, detached: true, stdio: 'ignore', windowsHide: true })
     if (child && typeof child.unref === 'function') child.unref()
     return { argv, preview, pid: child && child.pid, style: applyResult }
   })
 
   ipcMain.handle('layouts:preview', async (_e, layout) => {
-    return buildWtCommand(layout)
+    const defaultShellKind = await defaultShellKindFromSettings()
+    return buildWtCommand(layout, { defaultShellKind })
   })
 
   ipcMain.handle('profiles:list', async () => {
@@ -354,6 +367,39 @@ function register(deps) {
     const res = await dialog.showOpenDialog(getMainWindow(), opts)
     if (res.canceled || !res.filePaths.length) return null
     return res.filePaths[0]
+  })
+
+  ipcMain.handle('wt:listStaleBackups', async () => {
+    const settingsPath = findExistingSettingsPath()
+    if (!settingsPath) return { settingsPath: null, backups: [] }
+    const backups = await startupRestore.findBackups(settingsPath, fs)
+    return { settingsPath, backups }
+  })
+
+  ipcMain.handle('wt:restoreBackup', async (_e, backupPath) => {
+    const settingsPath = findExistingSettingsPath()
+    if (!settingsPath) throw new Error('WT settings.json not found')
+    if (!backupPath || typeof backupPath !== 'string') throw new Error('backupPath required')
+    await startupRestore.restoreFromBackup(settingsPath, backupPath, fs)
+    // After restore, settings.json matches the backup we just used. Drop ALL
+    // wtw-backup-* siblings so we don't re-prompt on the next launch — they
+    // are now stale relative to the freshly-restored state.
+    const remaining = await startupRestore.findBackups(settingsPath, fs)
+    await startupRestore.discardAll(remaining.map(b => b.path), fs)
+    // Forget any in-memory snapshot for this path so quit-time restoreAll
+    // doesn't try to overwrite the user's just-restored settings.json.
+    if (styleSession && typeof styleSession.forget === 'function') {
+      styleSession.forget(settingsPath)
+    }
+    return { ok: true, settingsPath }
+  })
+
+  ipcMain.handle('wt:discardBackups', async () => {
+    const settingsPath = findExistingSettingsPath()
+    if (!settingsPath) return { discarded: 0 }
+    const backups = await startupRestore.findBackups(settingsPath, fs)
+    const out = await startupRestore.discardAll(backups.map(b => b.path), fs)
+    return { discarded: backups.length - out.errors.length, errors: out.errors }
   })
 
   ipcMain.handle('dialog:pickImage', async (_e, defaultPath) => {

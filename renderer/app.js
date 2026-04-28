@@ -1418,6 +1418,48 @@ if (el.appSettingsRoot) {
 
 loadProfiles()
 loadAppSettings().then(restoreLastDir)
+checkStaleBackups()
+
+async function checkStaleBackups() {
+  try {
+    const res = await window.wt.listStaleBackups()
+    if (!res || !Array.isArray(res.backups) || !res.backups.length) return
+    showRestoreBanner(res.backups)
+  } catch (err) {
+    console.warn('listStaleBackups failed:', err)
+  }
+}
+
+function showRestoreBanner(backups) {
+  const banner = document.getElementById('restoreBanner')
+  if (!banner) return
+  const latest = backups[backups.length - 1]
+  const msg = banner.querySelector('[data-restore-msg]')
+  const n = backups.length
+  msg.textContent = n === 1
+    ? `Wrangler patched WT settings.json earlier and didn't restore it (backup: ${latest.stamp}).`
+    : `Wrangler patched WT settings.json earlier and didn't restore it (${n} backups; latest ${latest.stamp}).`
+  const restoreBtn = banner.querySelector('[data-action="restoreBackup"]')
+  const dismissBtn = banner.querySelector('[data-action="discardBackups"]')
+  restoreBtn.onclick = async () => {
+    try {
+      await window.wt.restoreBackup(latest.path)
+      banner.classList.add('hidden')
+      toast('WT settings.json restored', 'success')
+    } catch (err) {
+      toast('Restore failed: ' + (err.message || err), 'error')
+    }
+  }
+  dismissBtn.onclick = async () => {
+    try {
+      await window.wt.discardBackups()
+      banner.classList.add('hidden')
+    } catch (err) {
+      toast('Dismiss failed: ' + (err.message || err), 'error')
+    }
+  }
+  banner.classList.remove('hidden')
+}
 
 window.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey

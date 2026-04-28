@@ -14,8 +14,19 @@ function quoteArg(value) {
   return `"${str.replace(/"/g, '\\"')}"`
 }
 
+// Wrap a composed shell command so wt.exe's argv parser keeps it as ONE
+// positional token. Without this, wt re-joins its argv with spaces when
+// building the child's commandline — losing the inner quotes that make
+// `claude "start terse"` a single arg and truncating user input to the first
+// word.
+function quoteArgvForWt(s) {
+  if (!s) return s
+  return `"${s.replace(/"/g, '\\"')}"`
+}
+
 function profileKind(profile) {
-  const p = (profile || '').toLowerCase()
+  const p = (profile || '').toLowerCase().trim()
+  if (!p) return null
   if (p === 'cmd' || p === 'command prompt') return 'cmd'
   if (p.includes('bash') || p.includes('wsl') || p.includes('ubuntu')) return 'bash'
   return 'pwsh'
@@ -59,19 +70,26 @@ function composeChain(kind, main, post, delay) {
   return main
 }
 
-function composeShellCommand(pane) {
+function composeShellCommand(pane, defaultShellKind) {
   const main = pane.command || ''
   const post = pane.postCommand || ''
   if (!main && !post) return ''
-  const kind = pane.shellKind || profileKind(pane.profile)
+  const kind = pane.shellKind || profileKind(pane.profile) || defaultShellKind || null
   const delay = postDelaySeconds(pane.postDelay)
+  if (!kind) {
+    // (default) profile with no resolvable shell — emit bare main (post chains
+    // need a known shell, so we drop them when there's nothing to wrap with).
+    // Pane will run the command as wt's commandline directly under whatever
+    // profile WT picks; no keepalive.
+    return main
+  }
   const script = composeChain(kind, main, post, delay)
   // cmd needs quotes around chained scripts so `&` survives argv tokenization.
   const requireQuotes = kind === 'cmd' && Boolean(post)
   return wrapThroughShell(kind, script, { requireQuotes })
 }
 
-function buildPaneArgs(pane, isFirstInTab, target) {
+function buildPaneArgs(pane, isFirstInTab, target, defaultShellKind) {
   const parts = ['-w', quoteArg(target)]
   if (isFirstInTab) {
     parts.push('new-tab')
@@ -84,17 +102,17 @@ function buildPaneArgs(pane, isFirstInTab, target) {
   }
   if (pane.profile) parts.push('-p', quoteArg(pane.profile))
   if (pane.dir) parts.push('-d', quoteArg(pane.dir))
-  const shellCmd = composeShellCommand(pane)
-  if (shellCmd) parts.push(shellCmd)
+  const shellCmd = composeShellCommand(pane, defaultShellKind)
+  if (shellCmd) parts.push(quoteArgvForWt(shellCmd))
   return parts.join(' ')
 }
 
-function buildTab(tab, target) {
+function buildTab(tab, target, defaultShellKind) {
   const panes = Array.isArray(tab.panes) && tab.panes.length ? tab.panes : [{}]
   const firstPane = { title: tab.title, ...panes[0] }
-  const segments = [buildPaneArgs(firstPane, true, target)]
+  const segments = [buildPaneArgs(firstPane, true, target, defaultShellKind)]
   for (let i = 1; i < panes.length; i++) {
-    segments.push(buildPaneArgs(panes[i], false, target))
+    segments.push(buildPaneArgs(panes[i], false, target, defaultShellKind))
   }
   return segments.join(' ; ')
 }
@@ -109,19 +127,21 @@ function resolveWindowTarget(layout) {
   return name || generateUniqueWindowName()
 }
 
-function buildWtCommand(layout) {
+function buildWtCommand(layout, opts) {
   if (!layout || !Array.isArray(layout.tabs) || !layout.tabs.length) {
     throw new Error('layout must have at least one tab')
   }
+  const defaultShellKind = (opts && opts.defaultShellKind) || null
   const target = resolveWindowTarget(layout)
-  const tabSegments = layout.tabs.map(tab => buildTab(tab, target))
+  const tabSegments = layout.tabs.map(tab => buildTab(tab, target, defaultShellKind))
   return ['wt', tabSegments.join(' ; ')].join(' ')
 }
 
-function buildWtArgv(layout) {
+function buildWtArgv(layout, opts) {
   if (!layout || !Array.isArray(layout.tabs) || !layout.tabs.length) {
     throw new Error('layout must have at least one tab')
   }
+  const defaultShellKind = (opts && opts.defaultShellKind) || null
   const target = resolveWindowTarget(layout)
   const argv = []
   layout.tabs.forEach((tab) => {
@@ -139,11 +159,11 @@ function buildWtArgv(layout) {
       }
       if (pane.profile) argv.push('-p', pane.profile)
       if (pane.dir) argv.push('-d', pane.dir)
-      const shellCmd = composeShellCommand(pane)
+      const shellCmd = composeShellCommand(pane, defaultShellKind)
       if (shellCmd) argv.push(shellCmd)
     })
   })
   return argv
 }
 
-module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg, resolveWindowTarget, profileKind }
+module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg, quoteArgvForWt, resolveWindowTarget, profileKind }
