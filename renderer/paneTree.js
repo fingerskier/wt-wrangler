@@ -55,7 +55,38 @@
     return out
   }
 
-  const api = { reorderPanesForDrop, zoneToSplit, pickZone, reorderTabsForDrop, pickTabSide }
+  const VALID_SPLIT_DIRS = ['right', 'left', 'down', 'up']
+
+  function clonePane(p) {
+    return p && typeof p === 'object' ? { ...p } : {}
+  }
+
+  function splitFromPane(panes, sourceIdx, dir, template) {
+    if (!Array.isArray(panes)) return null
+    if (sourceIdx < 0 || sourceIdx >= panes.length) return null
+    if (!VALID_SPLIT_DIRS.includes(dir)) return null
+    const tpl = template && typeof template === 'object' ? { ...template } : {}
+    const newPane = { ...tpl, split: dir }
+    // Last-pane case: just append.
+    if (sourceIdx === panes.length - 1) {
+      return [...panes.map(clonePane), newPane]
+    }
+    // Middle-pane case: move source to end, then append.
+    const out = panes.map(clonePane)
+    const [moved] = out.splice(sourceIdx, 1)
+    if (sourceIdx === 0) {
+      // Source was the tab root (no split field). After move, the new pane[0]
+      // becomes root — drop its split field. The moved-from-root pane needs a
+      // default split since it now sits at the end of the chain.
+      if (out.length > 0) delete out[0].split
+      if (!moved.split) moved.split = 'right'
+    }
+    out.push(moved)
+    out.push(newPane)
+    return out
+  }
+
+  const api = { reorderPanesForDrop, zoneToSplit, pickZone, reorderTabsForDrop, pickTabSide, splitFromPane }
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   if (typeof window !== 'undefined') window.PaneTree = api

@@ -676,20 +676,23 @@ function renderPane(pane, paneIdx, tab, isLast) {
   const splitRightBtn = card.querySelector('[data-action="splitRight"]')
   const splitDownBtn = card.querySelector('[data-action="splitDown"]')
   const doSplit = (dir) => {
-    if (!isLast) {
-      toast('wt splits the focused (last-added) pane — split from the last pane', 'error')
+    const template = normalizePane({ split: dir, profile: pane.profile, dir: pane.dir })
+    const next = window.PaneTree.splitFromPane(tab.panes, paneIdx, dir, template)
+    if (!next) {
+      toast('Split rejected (invalid index/direction)', 'error')
       return
     }
-    tab.panes.push(normalizePane({ split: dir, profile: pane.profile, dir: pane.dir }))
+    tab.panes = next
     markDirty({ structural: true })
     renderEditor()
+    if (!isLast) {
+      toast('Pane reordered to satisfy wt CLI; spatial layout may have shifted', 'success')
+    }
   }
   splitRightBtn.addEventListener('click', () => doSplit('right'))
   splitDownBtn.addEventListener('click', () => doSplit('down'))
   if (!isLast) {
-    splitRightBtn.disabled = true
-    splitDownBtn.disabled = true
-    splitRightBtn.title = 'Only the last pane can be split (wt CLI constraint)'
+    splitRightBtn.title = 'Splitting reorders the panes array (wt CLI splits the last-added pane)'
     splitDownBtn.title = splitRightBtn.title
   }
 
