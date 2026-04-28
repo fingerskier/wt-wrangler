@@ -299,14 +299,15 @@ test('layouts:preview returns wt command string', async () => {
   assert.match(cmd, /^wt(\.exe)? /)
 })
 
-test('layouts:run spawns wt via argv form (bypasses cmd.exe to preserve \\" escapes)', async () => {
-  // Regression: spawn(string, {shell:true}) routes through cmd.exe, which does
-  // NOT recognize \" as an escaped quote — it strips/mangles the wrapping that
-  // quoteArgvForWt adds. Result: wt receives a corrupted commandline and
-  // launches the wrapped string as if it were the executable name
-  // (CreateProcess error 0x80070002 "file not found"). Spawning argv-form
-  // bypasses cmd.exe so node's win32 escape produces CommandLineToArgvW-
-  // compatible output that wt's argv parser unparses correctly.
+test('layouts:run spawns wt via argv form with shell wrapper split into separate tokens', async () => {
+  // Two-part regression fix:
+  // 1. spawn argv-form (not shell:true) avoids cmd.exe quote-mangling.
+  // 2. The shell wrapper (powershell -NoExit -Command <script>) is pushed as
+  //    SEPARATE argv tokens — not as a single string with embedded quotes —
+  //    because wt's commandline-rebuilder naively wraps any element with
+  //    whitespace in "..." without escaping inner quotes, producing broken
+  //    child commandlines like `"powershell -NoExit -Command "<script>""`
+  //    that CreateProcess can't parse (error 0x80070002).
   const ipc = makeIpcStub()
   const spawn = makeSpawnStub((cmd, args, opts) => {
     assert.equal(cmd, 'wt', 'spawn cmd should be bare "wt", not a shell string')
@@ -328,13 +329,13 @@ test('layouts:run spawns wt via argv form (bypasses cmd.exe to preserve \\" esca
   assert.match(res.preview, /^wt/)
   assert.equal(res.pid, 4242)
   assert.equal(spawn.calls.length, 1)
-  // The pwsh-wrapped command must reach spawn as ONE argv element with quotes
-  // intact — not split, not mangled. node will then escape it correctly when
-  // building the win32 commandline for wt.
   const passed = spawn.calls[0].args
-  assert.ok(
-    passed.includes('powershell -NoExit -Command "npx paperclipai run"'),
-    `expected wrapped command as single argv element, got: ${JSON.stringify(passed)}`,
+  // Tail = pwsh wrapper split across 4 argv tokens.
+  const tail = passed.slice(-4)
+  assert.deepEqual(
+    tail,
+    ['powershell', '-NoExit', '-Command', 'npx paperclipai run'],
+    `expected pwsh wrapper split into 4 argv tokens, got: ${JSON.stringify(passed)}`,
   )
 })
 

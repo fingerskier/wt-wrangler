@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { buildWtCommand, buildWtArgv, composeShellCommand, resolveWindowTarget } = require('../src/wtCommand')
+const { buildWtCommand, buildWtArgv, composeShellCommand, composeShellArgv, resolveWindowTarget } = require('../src/wtCommand')
 
 const readmeLayout = {
   name: 'dev-cockpit',
@@ -28,13 +28,15 @@ const readmeLayout = {
 test('buildWtCommand produces wt invocation with window, tabs and splits', () => {
   const cmd = buildWtCommand(readmeLayout)
   assert.ok(cmd.startsWith('wt -w dev new-tab '), cmd)
-  // Each shellCmd is wrapped in "..." with inner " escaped so wt's argv parser
-  // treats it as ONE positional token (preserves quoting through the argv
-  // re-join wt does when building the child commandline).
-  assert.match(cmd, /-w dev new-tab --title App -p pwsh -d C:\\dev\\my-app "powershell -NoExit -Command \\"npm run dev\\""/)
-  assert.match(cmd, /-w dev split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app "cmd \/k npm test"/)
-  assert.match(cmd, /-w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server "powershell -NoExit -Command \\"npm run server\\""/)
-  assert.match(cmd, /-w dev split-pane -H --size 0\.4 -p pwsh "powershell -NoExit -Command \\"npm run logs\\""/)
+  // shellCmd is emitted as the wrapped string from wrapThroughShell — bare,
+  // not double-wrapped. wt's commandline rebuilder mangles single argv tokens
+  // that have both spaces AND embedded quotes, which is why buildWtArgv now
+  // splits the shell wrapper into separate argv tokens (see composeShellArgv).
+  // The string preview here is for display only.
+  assert.match(cmd, /-w dev new-tab --title App -p pwsh -d C:\\dev\\my-app powershell -NoExit -Command "npm run dev"/)
+  assert.match(cmd, /-w dev split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app cmd \/k npm test/)
+  assert.match(cmd, /-w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server powershell -NoExit -Command "npm run server"/)
+  assert.match(cmd, /-w dev split-pane -H --size 0\.4 -p pwsh powershell -NoExit -Command "npm run logs"/)
   const tabSeps = cmd.split(' ; ').length - 1
   assert.equal(tabSeps, 3, `expected 3 " ; " separators, got ${tabSeps}: ${cmd}`)
 })
@@ -160,7 +162,7 @@ test('buildWtCommand emits postCommand-bearing pane through wrapped shell', () =
     }],
   }
   const cmd = buildWtCommand(layout)
-  assert.match(cmd, /"powershell -NoExit -Command \\"main; Start-Sleep -Seconds 1; after\\""/)
+  assert.match(cmd, /powershell -NoExit -Command "main; Start-Sleep -Seconds 1; after"/)
 })
 
 // --- Regression: (default) profile and embedded-quote preservation -----
@@ -182,16 +184,13 @@ test('composeShellCommand: pane.profile still wins over defaultShellKind', () =>
   assert.equal(out, 'powershell -NoExit -Command "echo hi"')
 })
 
-test('buildWtCommand wraps shellCmd as ONE quoted argv token (claude "start terse")', () => {
+test('buildWtCommand emits readable preview for claude "start terse"', () => {
   const layout = {
     window: 'X',
     tabs: [{ title: 'T', panes: [{ profile: 'cmd', command: 'claude "start terse"' }] }],
   }
   const cmd = buildWtCommand(layout)
-  // wt argv parses "cmd /k claude \"start terse\"" → one token
-  // = `cmd /k claude "start terse"` → CreateProcess sees claude with one
-  // arg `start terse` (no truncation).
-  assert.match(cmd, /"cmd \/k claude \\"start terse\\""/)
+  assert.match(cmd, /cmd \/k claude "start terse"/)
 })
 
 test('buildWtCommand respects defaultShellKind for empty-profile panes', () => {
@@ -200,7 +199,7 @@ test('buildWtCommand respects defaultShellKind for empty-profile panes', () => {
     tabs: [{ title: 'T', panes: [{ command: 'claude "start terse"' }] }],
   }
   const withCmd = buildWtCommand(layout, { defaultShellKind: 'cmd' })
-  assert.match(withCmd, /"cmd \/k claude \\"start terse\\""/)
+  assert.match(withCmd, /cmd \/k claude "start terse"/)
   assert.ok(!/-p /.test(withCmd), 'no -p emitted when pane.profile is empty')
 })
 
@@ -210,19 +209,79 @@ test('buildWtCommand emits bare command when profile empty AND no defaultShellKi
     tabs: [{ title: 'T', panes: [{ command: 'claude "start terse"' }] }],
   }
   const cmd = buildWtCommand(layout)
-  // Bare command, still wrapped as one argv token so quotes survive.
-  assert.match(cmd, /"claude \\"start terse\\""/)
-  // No powershell wrapping forced.
+  assert.match(cmd, /claude "start terse"/)
   assert.ok(!/powershell/.test(cmd), 'no powershell wrap when (default)')
 })
 
-test('buildWtArgv pushes shellCmd as ONE element regardless of inner quoting', () => {
+test('buildWtArgv splits shell wrapper into separate argv tokens (avoids wt re-wrap mangling)', () => {
+  // wt joins trailing positionals with spaces and naively wraps elements
+  // containing whitespace in "..." — without escaping inner quotes. So a
+  // single argv element `cmd /k claude "start terse"` produces a child
+  // commandline like `"cmd /k claude "start terse""` — CreateProcess fails
+  // ("file not found"). Splitting into ['cmd','/k','claude','start terse']-
+  // shaped tokens lets wt wrap only `start terse` (which has no inner quotes)
+  // — clean re-join, child runs.
   const argv = buildWtArgv({
     window: 'X',
     tabs: [{ title: 'T', panes: [{ profile: 'cmd', command: 'claude "start terse"' }] }],
   })
-  // Last element should be the wrapped shell command string, not split.
-  assert.equal(argv[argv.length - 1], 'cmd /k claude "start terse"')
+  // Tokens for the cmd wrapper come through as separate argv entries.
+  const tail = argv.slice(-3)
+  assert.deepEqual(tail, ['cmd', '/k', 'claude "start terse"'])
+})
+
+test('buildWtArgv splits pwsh wrapper into separate argv tokens (regression: paperclip case)', () => {
+  // Regression: composeShellCommand emits `powershell -NoExit -Command "<script>"`
+  // as one string. Pushing that as a single argv element triggered wt's
+  // re-wrap-with-embedded-quotes bug. Splitting into 4 tokens fixes it.
+  const argv = buildWtArgv({
+    window: 'Paperclip',
+    tabs: [{ title: 'Paperclip', panes: [{
+      profile: 'Windows PowerShell',
+      command: 'npx paperclipai run',
+    }] }],
+  })
+  const tail = argv.slice(-4)
+  assert.deepEqual(tail, ['powershell', '-NoExit', '-Command', 'npx paperclipai run'])
+})
+
+test('composeShellArgv returns argv tokens for cmd wrapper', () => {
+  assert.deepEqual(
+    composeShellArgv({ profile: 'cmd', command: 'dir' }),
+    ['cmd', '/k', 'dir'],
+  )
+})
+
+test('composeShellArgv returns argv tokens for pwsh wrapper', () => {
+  assert.deepEqual(
+    composeShellArgv({ profile: 'pwsh', command: 'Get-Process' }),
+    ['powershell', '-NoExit', '-Command', 'Get-Process'],
+  )
+})
+
+test('composeShellArgv returns argv tokens for bash wrapper (script + exec bash chained)', () => {
+  assert.deepEqual(
+    composeShellArgv({ profile: 'Ubuntu', command: 'npm start' }),
+    ['bash', '-i', '-c', 'npm start; exec bash'],
+  )
+})
+
+test('composeShellArgv returns [] when no command/postCommand', () => {
+  assert.deepEqual(composeShellArgv({ profile: 'pwsh' }), [])
+})
+
+test('composeShellArgv returns [main] when no shell kind resolvable', () => {
+  assert.deepEqual(
+    composeShellArgv({ command: 'claude "start terse"' }),
+    ['claude "start terse"'],
+  )
+})
+
+test('composeShellArgv chains postCommand into script with shell-correct sleep', () => {
+  assert.deepEqual(
+    composeShellArgv({ profile: 'pwsh', command: 'a', postCommand: 'b', postDelay: 2 }),
+    ['powershell', '-NoExit', '-Command', 'a; Start-Sleep -Seconds 2; b'],
+  )
 })
 
 test('buildWtCommand throws on empty layout', () => {

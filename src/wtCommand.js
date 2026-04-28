@@ -14,16 +14,6 @@ function quoteArg(value) {
   return `"${str.replace(/"/g, '\\"')}"`
 }
 
-// Wrap a composed shell command so wt.exe's argv parser keeps it as ONE
-// positional token. Without this, wt re-joins its argv with spaces when
-// building the child's commandline — losing the inner quotes that make
-// `claude "start terse"` a single arg and truncating user input to the first
-// word.
-function quoteArgvForWt(s) {
-  if (!s) return s
-  return `"${s.replace(/"/g, '\\"')}"`
-}
-
 function profileKind(profile) {
   const p = (profile || '').toLowerCase().trim()
   if (!p) return null
@@ -89,6 +79,32 @@ function composeShellCommand(pane, defaultShellKind) {
   return wrapThroughShell(kind, script, { requireQuotes })
 }
 
+// Argv-form wrapper: returns the shell command split into argv tokens so wt's
+// commandline-rebuilding logic doesn't mangle them. wt joins trailing
+// positionals with spaces and naively wraps any element containing whitespace
+// in "..." — without escaping inner quotes. So a single argv element like
+// `cmd /k claude "start terse"` becomes `"cmd /k claude "start terse""` in
+// the child commandline (literal embedded quotes), and CreateProcess fails
+// with "file not found". Splitting into separate argv tokens means only the
+// LAST token (the script) typically has spaces, and it has no inner quotes
+// to break.
+function shellArgvFromKind(kind, script) {
+  if (kind === 'cmd') return ['cmd', '/k', script]
+  if (kind === 'bash') return ['bash', '-i', '-c', `${script}; exec bash`]
+  return ['powershell', '-NoExit', '-Command', script]
+}
+
+function composeShellArgv(pane, defaultShellKind) {
+  const main = pane.command || ''
+  const post = pane.postCommand || ''
+  if (!main && !post) return []
+  const kind = pane.shellKind || profileKind(pane.profile) || defaultShellKind || null
+  const delay = postDelaySeconds(pane.postDelay)
+  if (!kind) return [main]
+  const script = composeChain(kind, main, post, delay)
+  return shellArgvFromKind(kind, script)
+}
+
 function buildPaneArgs(pane, isFirstInTab, target, defaultShellKind) {
   const parts = ['-w', quoteArg(target)]
   if (isFirstInTab) {
@@ -103,7 +119,7 @@ function buildPaneArgs(pane, isFirstInTab, target, defaultShellKind) {
   if (pane.profile) parts.push('-p', quoteArg(pane.profile))
   if (pane.dir) parts.push('-d', quoteArg(pane.dir))
   const shellCmd = composeShellCommand(pane, defaultShellKind)
-  if (shellCmd) parts.push(quoteArgvForWt(shellCmd))
+  if (shellCmd) parts.push(shellCmd)
   return parts.join(' ')
 }
 
@@ -159,11 +175,11 @@ function buildWtArgv(layout, opts) {
       }
       if (pane.profile) argv.push('-p', pane.profile)
       if (pane.dir) argv.push('-d', pane.dir)
-      const shellCmd = composeShellCommand(pane, defaultShellKind)
-      if (shellCmd) argv.push(shellCmd)
+      const shellArgv = composeShellArgv(pane, defaultShellKind)
+      for (const tok of shellArgv) argv.push(tok)
     })
   })
   return argv
 }
 
-module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, quoteArg, quoteArgvForWt, resolveWindowTarget, profileKind }
+module.exports = { buildWtCommand, buildWtArgv, composeShellCommand, composeShellArgv, quoteArg, resolveWindowTarget, profileKind }
