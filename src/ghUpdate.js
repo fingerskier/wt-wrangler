@@ -25,10 +25,16 @@ const DETACHED_HEAD_PATTERNS = [
   /detached head/i,
 ]
 
+const NO_UPSTREAM_PATTERNS = [
+  /has no upstream branch/i,
+  /--set-upstream/i,
+]
+
 const MESSAGES = {
   auth: 'Auth required — push from a terminal to enter credentials',
   nonFastForward: 'Remote is ahead — pull/rebase before pushing',
   detachedHead: 'Detached HEAD — checkout a branch before pushing',
+  noUpstream: 'Branch has no upstream — run `git push -u origin <branch>` once from a terminal to set tracking',
 }
 
 function any(patterns, text) {
@@ -40,14 +46,19 @@ function classifyGitError(stderr, stdout, step) {
   const err = typeof stderr === 'string' ? stderr : ''
   const out = typeof stdout === 'string' ? stdout : ''
   const blob = `${err}\n${out}`
-  // Priority: auth > detachedHead > nonFastForward. Auth eclipses all (you can't
-  // even talk to the remote). Detached eclipses non-fast-forward because the
-  // ref-rejection is downstream of the missing branch.
+  // Priority: auth > detachedHead > noUpstream > nonFastForward. Auth eclipses
+  // all (you can't even talk to the remote). Detached eclipses the rest because
+  // the ref-rejection is downstream of the missing branch. noUpstream is more
+  // specific and actionable than the generic "rejected" wording so it wins over
+  // nonFastForward.
   if (any(AUTH_PATTERNS, blob)) {
     return { class: 'auth', message: MESSAGES.auth, step }
   }
   if (any(DETACHED_HEAD_PATTERNS, blob)) {
     return { class: 'detachedHead', message: MESSAGES.detachedHead, step }
+  }
+  if (any(NO_UPSTREAM_PATTERNS, blob)) {
+    return { class: 'noUpstream', message: MESSAGES.noUpstream, step }
   }
   if (any(NON_FAST_FORWARD_PATTERNS, blob)) {
     return { class: 'nonFastForward', message: MESSAGES.nonFastForward, step }

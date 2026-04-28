@@ -115,3 +115,34 @@ test('classifyGitError: tolerates undefined inputs', () => {
   assert.equal(r.class, 'unknown')
   assert.ok(r.message)
 })
+
+// --- R3.9: noUpstream classification ---------------------------------------
+
+test('classifyGitError: "has no upstream branch" is noUpstream', () => {
+  const stderr = "fatal: The current branch feature/x has no upstream branch.\nTo push the current branch and set the remote as upstream, use\n\n    git push --set-upstream origin feature/x"
+  const r = classifyGitError(stderr, '', 'push')
+  assert.equal(r.class, 'noUpstream')
+  assert.match(r.message, /upstream|--set-upstream|push -u/i)
+})
+
+test('classifyGitError: "--set-upstream" hint alone is noUpstream', () => {
+  const stderr = 'use git push --set-upstream origin main'
+  const r = classifyGitError(stderr, '', 'push')
+  assert.equal(r.class, 'noUpstream')
+})
+
+test('classifyGitError: auth still wins over noUpstream when both present', () => {
+  // Hypothetical mixed output where push hits auth before discovering upstream config.
+  const stderr = "fatal: Authentication failed\nhint: use git push --set-upstream origin main"
+  const r = classifyGitError(stderr, '', 'push')
+  assert.equal(r.class, 'auth')
+})
+
+test('classifyGitError: noUpstream beats nonFastForward when both keywords appear', () => {
+  // Edge case: noUpstream is a more specific actionable signal than the generic
+  // "rejected" wording, so it wins. (Real-world this combo doesn't happen but
+  // we want the priority order documented in tests.)
+  const stderr = 'has no upstream branch\nUpdates were rejected'
+  const r = classifyGitError(stderr, '', 'push')
+  assert.equal(r.class, 'noUpstream')
+})
