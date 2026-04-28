@@ -131,6 +131,19 @@ test('remapLayoutProfiles is no-op for empty mapping', () => {
   assert.equal(next.tabs[0].panes[0].profile, 'pwsh')
 })
 
+test('transientName accepts an optional discriminator (collision avoidance)', () => {
+  assert.equal(A.transientName('devwin', 'pwsh'), 'wtw-devwin-pwsh')
+  assert.equal(A.transientName('devwin', 'pwsh', 'a1b2c3d4'), 'wtw-devwin-a1b2c3d4-pwsh')
+})
+
+test('buildFragment threads discriminator into transient profile names + mapping', () => {
+  const { fragment, mapping } = A.buildFragment(styledLayout, sampleSettings, 'deadbeef')
+  assert.equal(mapping.pwsh, 'wtw-devwin-deadbeef-pwsh')
+  assert.equal(mapping.cmd, 'wtw-devwin-deadbeef-cmd')
+  assert.equal(fragment.profiles[0].name, 'wtw-devwin-deadbeef-pwsh')
+  assert.equal(fragment.profiles[1].name, 'wtw-devwin-deadbeef-cmd')
+})
+
 test('remapLayoutProfiles stashes original shellKind so shell wrapper survives remap', () => {
   const cmdLayout = {
     window: 'cwin',

@@ -15,6 +15,9 @@ const styleApply = require('./src/wtStyleApply')
 const { makeStore } = require('./src/config')
 const { listEntries, moveLayoutFile } = require('./src/layouts')
 const { makeSession, restoreAll } = require('./src/wtStyleSession')
+const { fragmentFileName, styleHash, staleFragmentFiles } = require('./src/wtFragments')
+
+const FRAGMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 const APP_ICON = path.join(__dirname, 'asset', process.platform === 'win32' ? 'logo.ico' : 'logo.png')
 
@@ -44,6 +47,9 @@ function createWindow() {
 app.whenReady().then(() => {
   store = makeStore(app.getPath('userData'))
   createWindow()
+  // Drop stale fragment files from prior sessions (older than FRAGMENT_MAX_AGE_MS).
+  // Fire-and-forget — sweep failure should never block app startup.
+  sweepStaleFragments().catch(() => {})
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -131,7 +137,8 @@ async function applyStyleForLaunch(layout) {
   result.settingsPath = settingsPath
 
   if (styleApply.hasProfileStyle(style)) {
-    const { fragment, mapping } = styleApply.buildFragment(layout, settings)
+    const discriminator = styleHash(layout)
+    const { fragment, mapping } = styleApply.buildFragment(layout, settings, discriminator)
     if (fragment) {
       const fragPath = await writeFragmentFile(layout, fragment)
       result.fragmentPath = fragPath
@@ -177,10 +184,39 @@ async function writeFragmentFile(layout, fragment) {
   const dir = fragmentDir()
   if (!dir) throw new Error('LOCALAPPDATA not set')
   await fs.mkdir(dir, { recursive: true })
-  const safeWin = String(layout.window || 'wtw').replace(/[^A-Za-z0-9_\-]/g, '_')
-  const file = path.join(dir, `${safeWin}.json`)
+  const file = path.join(dir, fragmentFileName(layout))
   await writeFileAtomic(file, JSON.stringify(fragment, null, 2) + '\n')
   return file
+}
+
+async function sweepStaleFragments() {
+  const dir = fragmentDir()
+  if (!dir) return { swept: [], errors: [] }
+  let names
+  try {
+    names = await fs.readdir(dir)
+  } catch (_) {
+    return { swept: [], errors: [] }
+  }
+  const entries = []
+  for (const name of names) {
+    try {
+      const stat = await fs.stat(path.join(dir, name))
+      if (stat.isFile()) entries.push({ name, mtimeMs: stat.mtimeMs })
+    } catch (_) {}
+  }
+  const stale = staleFragmentFiles(entries, new Set(), Date.now(), FRAGMENT_MAX_AGE_MS)
+  const swept = []
+  const errors = []
+  for (const name of stale) {
+    try {
+      await fs.unlink(path.join(dir, name))
+      swept.push(name)
+    } catch (err) {
+      errors.push({ name, error: err.message || String(err) })
+    }
+  }
+  return { swept, errors }
 }
 
 async function writeFileAtomic(filePath, content) {

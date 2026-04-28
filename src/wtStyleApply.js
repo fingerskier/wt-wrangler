@@ -62,9 +62,13 @@ function makeGuid(seed) {
   return `{${x}-${y}-${z}-${w}-${v}}`
 }
 
-function transientName(windowName, baseName) {
+function transientName(windowName, baseName, discriminator) {
   const safeWin = String(windowName || 'window').replace(/[^A-Za-z0-9_\-]/g, '_')
   const safeBase = String(baseName || 'profile').replace(/[^A-Za-z0-9_\-]/g, '_')
+  if (discriminator) {
+    const safeDisc = String(discriminator).replace(/[^A-Za-z0-9_\-]/g, '_')
+    return `wtw-${safeWin}-${safeDisc}-${safeBase}`
+  }
   return `wtw-${safeWin}-${safeBase}`
 }
 
@@ -93,11 +97,11 @@ function uniqueBaseProfiles(layout) {
   return out
 }
 
-function buildTransientProfile(baseProfile, windowName, style, baseNameOverride) {
+function buildTransientProfile(baseProfile, windowName, style, baseNameOverride, discriminator) {
   const baseName = baseNameOverride || (baseProfile && baseProfile.name) || 'default'
-  const seed = `${windowName}::${baseName}`
+  const seed = `${windowName}::${discriminator || ''}::${baseName}`
   const next = baseProfile ? JSON.parse(JSON.stringify(baseProfile)) : {}
-  next.name = transientName(windowName, baseName)
+  next.name = transientName(windowName, baseName, discriminator)
   next.guid = makeGuid(seed)
   next.hidden = true
   const sub = styleProfileSubset(style)
@@ -105,7 +109,7 @@ function buildTransientProfile(baseProfile, windowName, style, baseNameOverride)
   return next
 }
 
-function buildFragment(layout, settings) {
+function buildFragment(layout, settings, discriminator) {
   const style = layout && layout.windowStyle
   if (!hasProfileStyle(style)) return { fragment: null, mapping: {} }
   const winName = (layout && typeof layout.window === 'string' && layout.window.trim())
@@ -117,7 +121,7 @@ function buildFragment(layout, settings) {
   const mapping = {}
   for (const baseName of bases) {
     const base = findProfileByName(settings, baseName)
-    const transient = buildTransientProfile(base, winName, style, baseName)
+    const transient = buildTransientProfile(base, winName, style, baseName, discriminator)
     profiles.push(transient)
     mapping[baseName] = transient.name
   }
