@@ -9,6 +9,7 @@ const { validateLayout } = require('./layoutSchema')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./wtFragments')
 const { classifyGitError } = require('./ghUpdate')
 const { writeFileAtomic } = require('./atomicWrite')
+const { runGit: runGitPure } = require('./gitRun')
 const appSettings = require('./appSettings')
 
 const FRAGMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
@@ -150,17 +151,21 @@ function register(deps) {
   }
 
   function runGit(args, cwd) {
-    return new Promise((resolve) => {
-      const child = spawn('git', args, { cwd, windowsHide: true })
-      let stdout = '', stderr = ''
-      child.stdout.on('data', d => { stdout += d.toString() })
-      child.stderr.on('data', d => { stderr += d.toString() })
-      child.on('error', err => resolve({ code: -1, stdout, stderr: err.message || String(err) }))
-      child.on('close', code => resolve({ code, stdout, stderr }))
-    })
+    return runGitPure({ spawn, setTimeout, clearTimeout }, args, cwd)
   }
 
-  function gitFail(step, stderr, stdout) {
+  function gitFail(step, result) {
+    if (result && result.timedOut) {
+      return {
+        ok: false,
+        step,
+        error: 'git command timed out — check network or pending credential prompt',
+        errorClass: 'timeout',
+        raw: (result.stderr || result.stdout || '').trim(),
+      }
+    }
+    const stderr = (result && result.stderr) || ''
+    const stdout = (result && result.stdout) || ''
     const c = classifyGitError(stderr, stdout, step)
     return { ok: false, step, error: c.message, errorClass: c.class, raw: (stderr || stdout || '').trim() }
   }
@@ -322,13 +327,13 @@ function register(deps) {
   ipcMain.handle('gh:update', async (_e, dir) => {
     if (!await isGitRepo(dir)) return { ok: false, step: 'check', error: 'Not a git repository', errorClass: 'unknown' }
     const add = await runGit(['add', '-A'], dir)
-    if (add.code !== 0) return gitFail('add', add.stderr, add.stdout)
+    if (add.code !== 0) return gitFail('add', add)
     const msg = `Wrangler update ${new Date().toISOString()}`
     const commit = await runGit(['commit', '-m', msg], dir)
     const nothing = commit.code !== 0 && /nothing to commit|no changes added/i.test(commit.stdout + commit.stderr)
-    if (commit.code !== 0 && !nothing) return gitFail('commit', commit.stderr, commit.stdout)
+    if (commit.code !== 0 && !nothing) return gitFail('commit', commit)
     const push = await runGit(['push'], dir)
-    if (push.code !== 0) return gitFail('push', push.stderr, push.stdout)
+    if (push.code !== 0) return gitFail('push', push)
     return { ok: true, committed: !nothing, message: msg }
   })
 

@@ -485,6 +485,55 @@ test('gh:update classifies auth failure on push', async (t) => {
   assert.equal(res.errorClass, 'auth')
 })
 
+test('gh:update reports timeout errorClass when git push hangs', async (t) => {
+  const dir = await tmpdir()
+  t.after(() => realFs.rm(dir, { recursive: true, force: true }))
+  await realFs.mkdir(path.join(dir, '.git'))
+  const ipc = makeIpcStub()
+  // Spawn that emits close immediately for add/commit, but never closes for push.
+  // We need real timers here, so use a tiny per-call timeout — but ipcHandlers
+  // calls runGitPure with the production default. Instead simulate a timed-out
+  // result directly by emitting on the spawn child: we make push's child hang,
+  // then synthetically end it after a short real timeout via a kill listener.
+  const spawn = function (cmd, args) {
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    child.kill = () => { child.emit('close', null) }
+    if (args[0] === 'push') {
+      // Never close on its own — the timeout in runGit must call kill().
+      // We'll trigger that by clobbering setTimeout below.
+    } else {
+      setImmediate(() => child.emit('close', 0))
+    }
+    return child
+  }
+  // Pin global setTimeout so the timer fires deterministically. ipcHandlers
+  // reaches into the global; we monkey-patch for the duration of the test.
+  const originalSetTimeout = global.setTimeout
+  let firedTimer = null
+  global.setTimeout = (fn, ms) => {
+    // Fast-fire timers >100ms (the runGit timeout); leave short ones (the
+    // 600ms wt-applyStyle delay etc.) alone — but gh:update doesn't use them.
+    if (ms > 100) {
+      firedTimer = setImmediate(fn)
+      return firedTimer
+    }
+    return originalSetTimeout(fn, ms)
+  }
+  t.after(() => { global.setTimeout = originalSetTimeout })
+  ipcHandlers.register({
+    ipcMain: ipc, dialog: {}, shell: {}, fs: realFs, fsSync: realFsSync,
+    spawn, store: makeMemoryStore(),
+    getMainWindow: () => null, env: {},
+  })
+  const res = await ipc.invoke('gh:update', dir)
+  assert.equal(res.ok, false)
+  assert.equal(res.step, 'push')
+  assert.equal(res.errorClass, 'timeout')
+  assert.match(res.error, /timed out/i)
+})
+
 test('gh:update classifies non-fast-forward push rejection', async (t) => {
   const dir = await tmpdir()
   t.after(() => realFs.rm(dir, { recursive: true, force: true }))
