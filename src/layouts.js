@@ -2,6 +2,7 @@
 
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { writeFileAtomic } = require('./atomicWrite')
 
 async function listEntries(dirPath) {
   if (!dirPath) return []
@@ -69,4 +70,22 @@ async function availableLayoutFile(dirPath, baseName) {
   throw new Error(`could not find available filename for "${baseName}" after 1000 attempts`)
 }
 
-module.exports = { listEntries, moveLayoutFile, availableLayoutFile }
+// Atomic layout writes: a power loss or process kill mid-write must not leave
+// the user's saved layout truncated or corrupted. writeFileAtomic writes to a
+// tmp sibling and renames into place; on rename failure the original file is
+// left untouched and the tmp is cleaned up.
+async function saveLayoutFile(fsApi, filePath, layout) {
+  const pretty = JSON.stringify(layout, null, 2)
+  await writeFileAtomic(fsApi, filePath, pretty)
+  return filePath
+}
+
+async function saveNewLayoutFile(fsApi, dirPath, suggestedName, layout) {
+  // availableLayoutFile uses fs/promises directly (it only reads); keep the
+  // collision-safe naming logic centralized rather than reimplementing here.
+  const target = await availableLayoutFile(dirPath, suggestedName)
+  await writeFileAtomic(fsApi, target, JSON.stringify(layout, null, 2))
+  return target
+}
+
+module.exports = { listEntries, moveLayoutFile, availableLayoutFile, saveLayoutFile, saveNewLayoutFile }

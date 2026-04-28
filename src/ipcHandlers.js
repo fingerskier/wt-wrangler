@@ -4,7 +4,7 @@ const path = require('node:path')
 const { buildWtArgv, buildWtCommand } = require('./wtCommand')
 const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./wtProfiles')
 const styleApply = require('./wtStyleApply')
-const { listEntries, moveLayoutFile, availableLayoutFile } = require('./layouts')
+const { listEntries, moveLayoutFile, saveLayoutFile, saveNewLayoutFile } = require('./layouts')
 const { validateLayout } = require('./layoutSchema')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./wtFragments')
 const { classifyGitError } = require('./ghUpdate')
@@ -226,16 +226,13 @@ function register(deps) {
   })
 
   ipcMain.handle('layouts:save', async (_e, filePath, layout) => {
-    const pretty = JSON.stringify(layout, null, 2)
-    await fs.writeFile(filePath, pretty, 'utf8')
+    await saveLayoutFile(fs, filePath, layout)
     return true
   })
 
   ipcMain.handle('layouts:saveNew', async (_e, dirPath, suggestedName, layout) => {
     const safe = (suggestedName || layout.name || 'layout').replace(/[^A-Za-z0-9_\-]/g, '_')
-    const target = await availableLayoutFile(dirPath, safe)
-    await fs.writeFile(target, JSON.stringify(layout, null, 2), 'utf8')
-    return target
+    return saveNewLayoutFile(fs, dirPath, safe, layout)
   })
 
   ipcMain.handle('layouts:delete', async (_e, filePath) => {

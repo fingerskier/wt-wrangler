@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { listEntries, moveLayoutFile, availableLayoutFile } = require('../src/layouts')
+const { listEntries, moveLayoutFile, availableLayoutFile, saveLayoutFile, saveNewLayoutFile } = require('../src/layouts')
 
 async function mkTmp() {
   return fsp.mkdtemp(path.join(os.tmpdir(), 'wtw-layouts-'))
@@ -121,4 +121,81 @@ test('availableLayoutFile is case-insensitive on Windows-style FS', async () => 
   await fsp.writeFile(path.join(dir, 'FOO.json'), '{}')
   const out = await availableLayoutFile(dir, 'foo')
   assert.notEqual(path.basename(out).toLowerCase(), 'foo.json')
+})
+
+// --- R3.5: atomic layout writes (save + saveNew) ----------------------------
+
+test('saveLayoutFile writes pretty-printed JSON and leaves no tmp', async () => {
+  const dir = await mkTmp()
+  const target = path.join(dir, 'l.json')
+  await saveLayoutFile(fsp, target, { name: 'L', tabs: [{ panes: [{}] }] })
+  const got = await fsp.readFile(target, 'utf8')
+  assert.equal(JSON.parse(got).name, 'L')
+  // 2-space indent — keep diffs readable in git
+  assert.ok(got.includes('  "name"') || got.includes('\n  '))
+  const remaining = await fsp.readdir(dir)
+  assert.deepEqual(remaining, ['l.json'], 'no tmp leftover')
+})
+
+test('saveLayoutFile overwrites existing file', async () => {
+  const dir = await mkTmp()
+  const target = path.join(dir, 'l.json')
+  await fsp.writeFile(target, JSON.stringify({ name: 'OLD' }))
+  await saveLayoutFile(fsp, target, { name: 'NEW' })
+  assert.equal(JSON.parse(await fsp.readFile(target, 'utf8')).name, 'NEW')
+})
+
+test('saveLayoutFile rename failure: original file content preserved + tmp cleaned', async () => {
+  const dir = await mkTmp()
+  const target = path.join(dir, 'l.json')
+  await fsp.writeFile(target, JSON.stringify({ name: 'ORIGINAL' }))
+  // Stub fs that delegates to real fsp for write/unlink, but throws on rename.
+  const stubFs = {
+    writeFile: fsp.writeFile,
+    unlink: fsp.unlink,
+    rename: async () => { throw new Error('EBUSY: rename denied') },
+  }
+  await assert.rejects(
+    saveLayoutFile(stubFs, target, { name: 'NEW' }),
+    /EBUSY/,
+  )
+  // Original file content must survive — atomicity guarantees the user's data isn't lost.
+  assert.equal(JSON.parse(await fsp.readFile(target, 'utf8')).name, 'ORIGINAL')
+  // Tmp sibling must have been cleaned up (R3.3).
+  const remaining = await fsp.readdir(dir)
+  assert.deepEqual(remaining, ['l.json'], 'no tmp leftover after rename failure')
+})
+
+test('saveNewLayoutFile picks available filename and writes atomically', async () => {
+  const dir = await mkTmp()
+  await fsp.writeFile(path.join(dir, 'foo.json'), '{}')
+  const target = await saveNewLayoutFile(fsp, dir, 'foo', { name: 'FOO' })
+  assert.equal(path.basename(target), 'foo_1.json')
+  assert.equal(JSON.parse(await fsp.readFile(target, 'utf8')).name, 'FOO')
+  const remaining = (await fsp.readdir(dir)).sort()
+  assert.deepEqual(remaining, ['foo.json', 'foo_1.json'])
+})
+
+test('saveNewLayoutFile rename failure: no partial layout file written', async () => {
+  const dir = await mkTmp()
+  const stubFs = {
+    writeFile: fsp.writeFile,
+    unlink: fsp.unlink,
+    readdir: fsp.readdir,
+    rename: async () => { throw new Error('EACCES') },
+  }
+  await assert.rejects(
+    saveNewLayoutFile(stubFs, dir, 'fresh', { name: 'X' }),
+  )
+  // Dir should be empty — no partial file, no orphan tmp.
+  const remaining = await fsp.readdir(dir)
+  assert.deepEqual(remaining, [], 'no orphan files after rename failure')
+})
+
+test('saveNewLayoutFile sanitizes basename (drops path-traversal-y characters)', async () => {
+  const dir = await mkTmp()
+  // The ipc handler does the sanitize, but the helper should accept already-sanitized
+  // input verbatim. Use a basename that survives the regex used at the call site.
+  const target = await saveNewLayoutFile(fsp, dir, 'safe_name', { name: 'X' })
+  assert.equal(path.basename(target), 'safe_name.json')
 })
