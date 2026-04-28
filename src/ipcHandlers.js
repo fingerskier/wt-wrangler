@@ -100,8 +100,13 @@ function register(deps) {
         if (changed) {
           const backup = await ensureSettingsBackup(settingsPath)
           if (backup) result.backupPath = backup
-          if (settingsRaw !== null && styleSession) styleSession.recordSnapshot(settingsPath, settingsRaw)
-          await writeFileAtomic(fs, settingsPath, JSON.stringify(nextSettings, null, 4) + '\n')
+          // Record both the original and what we're about to write so quit-time
+          // restoreAll can detect external edits and skip overwriting them.
+          const patched = JSON.stringify(nextSettings, null, 4) + '\n'
+          if (settingsRaw !== null && styleSession) {
+            styleSession.recordSnapshot(settingsPath, settingsRaw, patched)
+          }
+          await writeFileAtomic(fs, settingsPath, patched)
           result.applied.window = true
         }
       }
