@@ -14,11 +14,14 @@ const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./src/
 const styleApply = require('./src/wtStyleApply')
 const { makeStore } = require('./src/config')
 const { listEntries, moveLayoutFile } = require('./src/layouts')
+const { makeSession, restoreAll } = require('./src/wtStyleSession')
 
 const APP_ICON = path.join(__dirname, 'asset', process.platform === 'win32' ? 'logo.ico' : 'logo.png')
 
 let mainWindow = null
 let store = null
+const styleSession = makeSession()
+let willQuitInProgress = false
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -48,6 +51,19 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', async (event) => {
+  if (willQuitInProgress) return
+  if (!styleSession.pending().length) return
+  willQuitInProgress = true
+  event.preventDefault()
+  try {
+    await restoreAll(styleSession, fs)
+  } catch (_) {
+    // restoreAll captures per-path errors; this catch is paranoia.
+  }
+  app.quit()
 })
 
 ipcMain.handle('layouts:pickDir', async () => {
@@ -101,9 +117,11 @@ async function applyStyleForLaunch(layout) {
 
   const settingsPath = findExistingSettingsPath()
   let settings = null
+  let settingsRaw = null
   if (settingsPath) {
     try {
-      settings = parseJsonc(await fs.readFile(settingsPath, 'utf8'))
+      settingsRaw = await fs.readFile(settingsPath, 'utf8')
+      settings = parseJsonc(settingsRaw)
     } catch (err) {
       result.warnings.push(`could not parse WT settings.json: ${err.message}`)
     }
@@ -130,6 +148,9 @@ async function applyStyleForLaunch(layout) {
       if (changed) {
         const backup = await ensureSettingsBackup(settingsPath)
         if (backup) result.backupPath = backup
+        // Capture pre-patch content once per session so will-quit can restore it,
+        // leaving the user's WT chrome unchanged after Wrangler exits.
+        if (settingsRaw !== null) styleSession.recordSnapshot(settingsPath, settingsRaw)
         await writeFileAtomic(settingsPath, JSON.stringify(nextSettings, null, 4) + '\n')
         result.applied.window = true
       }
