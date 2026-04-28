@@ -44,3 +44,43 @@ test('read returns {} when file contains junk', async () => {
   const store = makeStore(dir)
   assert.deepEqual(await store.read(), {})
 })
+
+// --- R3.2: concurrent-write race -------------------------------------------
+
+test('concurrent writes both land in the final config (no clobbering)', async () => {
+  const dir = await mkTmp()
+  const store = makeStore(dir)
+  // Fire both writes simultaneously. Without serialization both reads see {}
+  // and the later writeFile clobbers the earlier patch.
+  await Promise.all([
+    store.write({ a: 1 }),
+    store.write({ b: 2 }),
+  ])
+  const final = await store.read()
+  assert.deepEqual(final, { a: 1, b: 2 }, 'both patches must survive')
+})
+
+test('many concurrent writes preserve every key', async () => {
+  const dir = await mkTmp()
+  const store = makeStore(dir)
+  const writes = []
+  for (let i = 0; i < 20; i++) {
+    writes.push(store.write({ [`k${i}`]: i }))
+  }
+  await Promise.all(writes)
+  const final = await store.read()
+  for (let i = 0; i < 20; i++) {
+    assert.equal(final[`k${i}`], i, `k${i} should be ${i}, got ${final[`k${i}`]}`)
+  }
+})
+
+test('concurrent write to same key uses last-scheduled value (serialized order)', async () => {
+  const dir = await mkTmp()
+  const store = makeStore(dir)
+  // Both target the same key — last enqueued wins after serialization.
+  const p1 = store.write({ x: 'first' })
+  const p2 = store.write({ x: 'second' })
+  await Promise.all([p1, p2])
+  const final = await store.read()
+  assert.equal(final.x, 'second')
+})

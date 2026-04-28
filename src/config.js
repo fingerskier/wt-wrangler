@@ -27,11 +27,19 @@ function makeStore(userDataDir) {
     }
   }
 
-  async function write(patch) {
-    await fsp.mkdir(userDataDir, { recursive: true })
-    const current = await read()
-    const next = { ...current, ...patch }
-    await fsp.writeFile(file, JSON.stringify(next, null, 2), 'utf8')
+  // Serialize writes through a promise chain so concurrent callers don't
+  // race read→spread→write and silently clobber each other's patches.
+  let writeQueue = Promise.resolve()
+  function write(patch) {
+    const next = writeQueue.then(async () => {
+      await fsp.mkdir(userDataDir, { recursive: true })
+      const current = await read()
+      const merged = { ...current, ...patch }
+      await fsp.writeFile(file, JSON.stringify(merged, null, 2), 'utf8')
+      return merged
+    })
+    // Don't let one rejection poison the queue.
+    writeQueue = next.catch(() => {})
     return next
   }
 

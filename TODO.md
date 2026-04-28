@@ -34,6 +34,9 @@ New `test/readme.test.js` (7 cases) pins README contract: forbids both stale phr
 
 ## Round 3 — top 1 (regenerated 2026-04-28)
 
+### R3.2 ~~config.write concurrent-call race~~ — DONE 2026-04-28
+**Status: DONE.** `makeStore.write` previously did `read → spread → write` with no mutex; concurrent calls (e.g. `appSettings:set` + `layouts:pickDir`'s `lastDir` write at startup) read the same baseline, each spread its own patch, each wrote — last writer won, the other's patch was silently lost. Fixed by adding a per-store promise-chain mutex: `let writeQueue = Promise.resolve(); function write(patch) { const next = writeQueue.then(async () => {/*read+spread+write*/}); writeQueue = next.catch(() => {}); return next; }`. The `.catch(() => {})` guards against one rejection poisoning the queue. Three new tests in `test/config.test.js` (two concurrent multi-key writes both land; 20-way concurrent writes preserve every key; same-key concurrent writes obey scheduled order). Suite 277 → 280 green.
+
 ### R3.1 ~~layouts:saveNew silently overwrites existing files~~ — DONE 2026-04-28
 **Status: DONE.** New pure helper `availableLayoutFile(dirPath, baseName)` in `src/layouts.js`: reads dir once, lower-cases all names (handles case-insensitive Windows FS — asking for `foo` when `FOO.json` exists still suffixes), and walks `<base>.json`, `<base>_1.json`, `<base>_2.json`, … returning the first free slot. Bounded at 1000 attempts. `ipcHandlers::layouts:saveNew` now calls the helper instead of building the path inline. 5 new tests in `test/layouts.test.js` (basic, _1, _2, gap-filling, case-insensitivity) + 1 collision test in `test/ipcHandlers.test.js` asserting the original file's content survives untouched. Suite 271 → 277 green.
 
