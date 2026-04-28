@@ -8,6 +8,7 @@ const { listEntries, moveLayoutFile, availableLayoutFile } = require('./layouts'
 const { validateLayout } = require('./layoutSchema')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./wtFragments')
 const { classifyGitError } = require('./ghUpdate')
+const { writeFileAtomic } = require('./atomicWrite')
 const appSettings = require('./appSettings')
 
 const FRAGMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
@@ -32,18 +33,12 @@ function register(deps) {
     return path.join(localAppData, 'Microsoft', 'Windows Terminal', 'Fragments', 'wt-wrangler')
   }
 
-  async function writeFileAtomic(filePath, content) {
-    const tmp = `${filePath}.wtw-tmp-${Date.now()}`
-    await fs.writeFile(tmp, content, 'utf8')
-    await fs.rename(tmp, filePath)
-  }
-
   async function writeFragmentFile(layout, fragment) {
     const dir = fragmentDir()
     if (!dir) throw new Error('LOCALAPPDATA not set')
     await fs.mkdir(dir, { recursive: true })
     const file = path.join(dir, fragmentFileName(layout))
-    await writeFileAtomic(file, JSON.stringify(fragment, null, 2) + '\n')
+    await writeFileAtomic(fs, file, JSON.stringify(fragment, null, 2) + '\n')
     return file
   }
 
@@ -105,7 +100,7 @@ function register(deps) {
           const backup = await ensureSettingsBackup(settingsPath)
           if (backup) result.backupPath = backup
           if (settingsRaw !== null && styleSession) styleSession.recordSnapshot(settingsPath, settingsRaw)
-          await writeFileAtomic(settingsPath, JSON.stringify(nextSettings, null, 4) + '\n')
+          await writeFileAtomic(fs, settingsPath, JSON.stringify(nextSettings, null, 4) + '\n')
           result.applied.window = true
         }
       }
