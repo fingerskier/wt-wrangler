@@ -233,6 +233,7 @@ button.small { padding: 1px 6px; font-size: 11px; letter-spacing: 0.04em; border
 }
 .layout-list li.file-item.active::before { color: var(--copper); }
 .layout-list li.error { color: var(--rust); }
+.layout-list li.warn { color: var(--ember); }
 .layout-list li.error::after {
   content: ' ⚠';
   color: var(--rust);

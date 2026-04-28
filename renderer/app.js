@@ -276,7 +276,20 @@ function renderEntries(entries, parentUl, depth) {
       }
     } else {
       li.classList.add('file-item')
-      li.textContent = entry.name || entry.file
+      const label = entry.name || entry.file
+      let badge = ''
+      let title = ''
+      if (entry.invalid || entry.error) {
+        badge = ' ⛔'
+        title = entry.error || 'invalid layout'
+        li.classList.add('error')
+      } else if (entry.warnings && entry.warnings.length) {
+        badge = ' ⚠️'
+        title = entry.warnings.join('\n')
+        li.classList.add('warn')
+      }
+      li.textContent = label + badge
+      if (title) li.title = title
       li.draggable = true
       li.addEventListener('dragstart', (e) => {
         e.dataTransfer.effectAllowed = 'move'
@@ -284,7 +297,6 @@ function renderEntries(entries, parentUl, depth) {
         li.classList.add('dragging')
       })
       li.addEventListener('dragend', () => li.classList.remove('dragging'))
-      if (entry.error) { li.classList.add('error'); li.title = entry.error }
       if (entry.path === state.currentPath) li.classList.add('active')
       li.addEventListener('click', () => selectLayout(entry.path))
       li.addEventListener('contextmenu', (e) => {
@@ -361,14 +373,22 @@ async function moveLayout(srcPath, destDir) {
 async function selectLayout(filePath) {
   if (state.dirty && !confirm('Discard unsaved changes?')) return
   try {
-    const layout = await window.wt.read(filePath)
+    const res = await window.wt.read(filePath)
+    if (!res || !res.ok) {
+      toast('Invalid layout: ' + (res && res.error ? res.error : 'unknown'), 'error')
+      return
+    }
     state.currentPath = filePath
-    state.currentLayout = normalizeLayout(layout)
+    state.currentLayout = normalizeLayout(res.data)
     state.currentTabIdx = 0
     state.dirty = false
     window.History.reset(history, snapshotLayout())
     renderList()
     renderEditor()
+    if (res.warnings && res.warnings.length) {
+      toast(`Loaded with ${res.warnings.length} warning(s)`, 'success')
+      console.warn('[layout warnings]', res.warnings)
+    }
   } catch (err) {
     toast('Failed to read: ' + err.message, 'error')
   }
@@ -1000,8 +1020,12 @@ el.dirPath.addEventListener('drop', async (e) => {
 })
 async function runLayoutAt(filePath) {
   try {
-    const layout = await window.wt.read(filePath)
-    await window.wt.run(normalizeLayout(layout))
+    const res = await window.wt.read(filePath)
+    if (!res || !res.ok) {
+      toast('Run failed: ' + (res && res.error ? res.error : 'invalid layout'), 'error')
+      return
+    }
+    await window.wt.run(normalizeLayout(res.data))
     toast('Launching Windows Terminal…', 'success')
   } catch (err) {
     toast('Run failed: ' + err.message, 'error')
@@ -1039,8 +1063,12 @@ async function openDir(dirPath) {
 
 async function openLayoutFirstDir(filePath) {
   try {
-    const layout = await window.wt.read(filePath)
-    const dir = findFirstLayoutDir(layout)
+    const res = await window.wt.read(filePath)
+    if (!res || !res.ok) {
+      toast('Read failed: ' + (res && res.error ? res.error : 'invalid layout'), 'error')
+      return
+    }
+    const dir = findFirstLayoutDir(res.data)
     if (!dir) {
       toast('No dir set in layout — revealing JSON instead', 'error')
       await window.wt.reveal(filePath)

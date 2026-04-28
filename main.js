@@ -14,6 +14,7 @@ const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./src/
 const styleApply = require('./src/wtStyleApply')
 const { makeStore } = require('./src/config')
 const { listEntries, moveLayoutFile } = require('./src/layouts')
+const { validateLayout } = require('./src/layoutSchema')
 const { makeSession, restoreAll } = require('./src/wtStyleSession')
 const { fragmentFileName, styleHash, staleFragmentFiles } = require('./src/wtFragments')
 const updater = require('./src/updater')
@@ -102,7 +103,25 @@ ipcMain.handle('layouts:pickDir', async () => {
 })
 
 ipcMain.handle('layouts:list', async (_e, dirPath) => {
-  return listEntries(dirPath)
+  const entries = await listEntries(dirPath)
+  for (const ent of entries) {
+    if (ent.type !== 'file' || ent.error) continue
+    try {
+      const raw = await fs.readFile(ent.path, 'utf8')
+      const data = JSON.parse(raw)
+      const v = validateLayout(data)
+      if (!v.ok) {
+        ent.invalid = true
+        ent.error = v.error
+      } else if (v.warnings.length) {
+        ent.warnings = v.warnings
+      }
+    } catch (err) {
+      ent.invalid = true
+      ent.error = String(err.message || err)
+    }
+  }
+  return entries
 })
 
 ipcMain.handle('layouts:move', async (_e, srcPath, destDir) => {
@@ -110,8 +129,19 @@ ipcMain.handle('layouts:move', async (_e, srcPath, destDir) => {
 })
 
 ipcMain.handle('layouts:read', async (_e, filePath) => {
-  const raw = await fs.readFile(filePath, 'utf8')
-  return JSON.parse(raw)
+  let raw
+  try {
+    raw = await fs.readFile(filePath, 'utf8')
+  } catch (err) {
+    return { ok: false, data: null, error: `read failed: ${err.message || err}`, warnings: [] }
+  }
+  let data
+  try {
+    data = JSON.parse(raw)
+  } catch (err) {
+    return { ok: false, data: null, error: `JSON parse: ${err.message || err}`, warnings: [] }
+  }
+  return validateLayout(data)
 })
 
 ipcMain.handle('layouts:save', async (_e, filePath, layout) => {
