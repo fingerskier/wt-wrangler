@@ -5,7 +5,7 @@ Windows Terminal layouts builder/runner (Electron)
 ```
 npm install
 npm start        # launches the Electron GUI (via electron-forge)
-npm test         # runs the command-builder unit tests
+npm test         # runs the unit-test suite (pure modules + IPC harness + CI contract)
 ```
 
 ## Packaging the installer
@@ -56,7 +56,7 @@ Building a chained `wt.exe` invocation has two non-obvious rules. Both are encod
     | `bash` / `wsl` / `ubuntu`     | `bash -i -c "<cmd>; exec bash"`              |
     | `pwsh` / default / everything else | `powershell -NoExit -Command "<cmd>"`   |
 
-A third rule lives in `main.js`: the process is spawned as `spawn(cmdString, { shell: true, ... })`. `shell: true` is required so that cmd.exe tokenizes the literal `;` as its own argv element before it reaches `wt.exe`.
+A third rule lives in `src/ipcHandlers.js` (the IPC layer extracted from `main.js`): the process is spawned as `spawn(cmdString, { shell: true, ... })`. `shell: true` is required so that cmd.exe tokenizes the literal `;` as its own argv element before it reaches `wt.exe`.
 
 ## Data Format
 ```json

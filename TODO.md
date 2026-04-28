@@ -20,9 +20,15 @@ Zero `postDelay` is still accepted silently (legitimate "no delay" case). 6 new 
 ### R2.2 ~~GitHub Actions workflow running `npm test` on push + PR~~ — DONE 2026-04-28
 **Status: DONE.** New workflow at `.github/workflows/test.yml`: `runs-on: windows-latest` (matches the wt.exe runtime constraint), triggers on push + pull_request to `main`, uses `actions/checkout@v4` and `actions/setup-node@v4` (Node 20 + npm cache), installs via `npm ci`, runs `npm test`. New `test/ciWorkflow.test.js` (9 contract tests) parses the YAML and asserts every required line is present so accidental edits to the workflow are caught locally before push. Suite 255 → 264 green.
 
-### R2.3 README staleness audit
-- "`npm test` runs the command-builder unit tests" — now 14 modules covered.
-- "the process is spawned as `spawn(cmdString, …)` in `main.js`" — that code lives in `src/ipcHandlers.js` now (post TODO #10).
+### R2.3 ~~README staleness audit~~ — DONE 2026-04-28
+**Status: DONE.** Two stale claims fixed:
+- "`npm test` runs the command-builder unit tests" → "runs the unit-test suite (pure modules + IPC harness + CI contract)".
+- "A third rule lives in `main.js`: the process is spawned as `spawn(cmdString, …)`" → "lives in `src/ipcHandlers.js` (the IPC layer extracted from `main.js`)".
+New `test/readme.test.js` (7 cases) pins README contract: forbids both stale phrases, and requires forward-references to `ipcHandlers`, `postCommand`/`postDelay`, and the auto-update + signing env vars. Future docs drift gets caught by `npm test`. Suite 264 → 271 green.
+
+---
+
+**Round 2 complete.** Backlog clear again.
 
 ---
 
