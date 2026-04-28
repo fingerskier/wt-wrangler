@@ -385,13 +385,16 @@ function normalizeTab(tab) {
 }
 
 function normalizePane(pane) {
-  return {
+  const out = {
     split: pane.split || 'right',
     size: typeof pane.size === 'number' ? pane.size : undefined,
     profile: pane.profile || '',
     dir: pane.dir || '',
     command: pane.command || '',
   }
+  if (pane.postCommand) out.postCommand = pane.postCommand
+  if (typeof pane.postDelay === 'number' && Number.isFinite(pane.postDelay)) out.postDelay = pane.postDelay
+  return out
 }
 
 function newLayoutAction() {
@@ -631,7 +634,8 @@ function renderPane(pane, paneIdx, tab, isLast) {
   const profileSel = card.querySelector('[data-field="profile"]')
   populateProfileSelect(profileSel, pane.profile || '')
   profileSel.addEventListener('change', () => { pane.profile = profileSel.value; markDirty() })
-  bindText('dir'); bindText('command')
+  bindText('dir'); bindText('command'); bindText('postCommand')
+  bindNumber('postDelay')
   attachDirPicker(card, pane, 'dir')
 
   const splitRightBtn = card.querySelector('[data-action="splitRight"]')

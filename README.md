@@ -33,6 +33,7 @@ When both are set, `WRANGLER_SIGN_PARAMS` wins. With neither, `npm run make` pro
 ## Features
 * Create and edit terminal layouts as JSON files
 * Load a layout using Windows Terminal (spawns `wt.exe`)
+* Optional per-pane `postCommand` runs in the **same shell** after the main command exits (with a configurable `postDelay`, default 3s). This is useful for setup-then-launch chains like `npm install` → `npm run dev`. It does **NOT** inject keystrokes into a running TUI/REPL — for that, you'd need a focus-aware SendInput supervisor or a named-pipe expect helper, neither of which Wrangler ships today.
 
 ## Interface
 * Open a directory containing the layout JSON files

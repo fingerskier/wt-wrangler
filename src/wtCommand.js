@@ -21,17 +21,54 @@ function profileKind(profile) {
   return 'pwsh'
 }
 
-function wrapThroughShell(kind, script) {
-  if (kind === 'cmd') return `cmd /k ${script}`
+function wrapThroughShell(kind, script, opts) {
+  // opts.requireQuotes signals the script uses shell metacharacters that need
+  // to survive cmd.exe's argv split — `cmd /k bare & chain` would tokenize wrong.
+  const requireQuotes = opts && opts.requireQuotes
+  if (kind === 'cmd') return requireQuotes ? `cmd /k "${script}"` : `cmd /k ${script}`
   if (kind === 'bash') return `bash -i -c "${script.replace(/"/g, '\\"')}; exec bash"`
   return `powershell -NoExit -Command "${script.replace(/"/g, '\\"')}"`
 }
 
+function postDelaySeconds(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 3
+  return n < 0 ? 0 : n
+}
+
+function composeChain(kind, main, post, delay) {
+  // Compose the inner script (no shell wrapper yet). Each shell has different
+  // sequencing + sleep syntax. Post runs in the SAME shell after main exits —
+  // it does not inject into a running TUI/REPL child.
+  if (kind === 'cmd') {
+    const sleep = `timeout /t ${delay} /nobreak >nul`
+    if (main && post) return `${main} & ${sleep} & ${post}`
+    if (post) return `${sleep} & ${post}`
+    return main
+  }
+  if (kind === 'bash') {
+    const sleep = `sleep ${delay}`
+    if (main && post) return `${main}; ${sleep}; ${post}`
+    if (post) return `${sleep}; ${post}`
+    return main
+  }
+  // pwsh / default
+  const sleep = `Start-Sleep -Seconds ${delay}`
+  if (main && post) return `${main}; ${sleep}; ${post}`
+  if (post) return `${sleep}; ${post}`
+  return main
+}
+
 function composeShellCommand(pane) {
   const main = pane.command || ''
-  if (!main) return ''
+  const post = pane.postCommand || ''
+  if (!main && !post) return ''
   const kind = pane.shellKind || profileKind(pane.profile)
-  return wrapThroughShell(kind, main)
+  const delay = postDelaySeconds(pane.postDelay)
+  const script = composeChain(kind, main, post, delay)
+  // cmd needs quotes around chained scripts so `&` survives argv tokenization.
+  const requireQuotes = kind === 'cmd' && Boolean(post)
+  return wrapThroughShell(kind, script, { requireQuotes })
 }
 
 function buildPaneArgs(pane, isFirstInTab, target) {

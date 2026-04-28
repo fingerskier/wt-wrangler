@@ -83,6 +83,83 @@ test('composeShellCommand prefers pane.shellKind over profile name', () => {
   assert.equal(out, 'cmd /k claude "start terse"')
 })
 
+test('composeShellCommand chains postCommand after postDelay (pwsh)', () => {
+  const out = composeShellCommand({
+    profile: 'pwsh',
+    command: 'echo hi',
+    postCommand: 'echo bye',
+    postDelay: 2,
+  })
+  assert.equal(out, 'powershell -NoExit -Command "echo hi; Start-Sleep -Seconds 2; echo bye"')
+})
+
+test('composeShellCommand chains postCommand after postDelay (cmd, quoted for & chain)', () => {
+  const out = composeShellCommand({
+    profile: 'cmd',
+    command: 'echo hi',
+    postCommand: 'echo bye',
+    postDelay: 5,
+  })
+  assert.equal(out, 'cmd /k "echo hi & timeout /t 5 /nobreak >nul & echo bye"')
+})
+
+test('composeShellCommand chains postCommand after postDelay (bash, before exec-bash keepalive)', () => {
+  const out = composeShellCommand({
+    profile: 'Ubuntu',
+    command: 'npm start',
+    postCommand: 'echo done',
+    postDelay: 1,
+  })
+  assert.equal(out, 'bash -i -c "npm start; sleep 1; echo done; exec bash"')
+})
+
+test('composeShellCommand defaults postDelay to 3 when omitted', () => {
+  const out = composeShellCommand({ profile: 'pwsh', command: 'a', postCommand: 'b' })
+  assert.equal(out, 'powershell -NoExit -Command "a; Start-Sleep -Seconds 3; b"')
+})
+
+test('composeShellCommand handles postCommand with no main command (pwsh)', () => {
+  const out = composeShellCommand({ profile: 'pwsh', postCommand: 'echo only', postDelay: 2 })
+  assert.equal(out, 'powershell -NoExit -Command "Start-Sleep -Seconds 2; echo only"')
+})
+
+test('composeShellCommand handles postCommand with no main command (cmd)', () => {
+  const out = composeShellCommand({ profile: 'cmd', postCommand: 'echo only', postDelay: 2 })
+  assert.equal(out, 'cmd /k "timeout /t 2 /nobreak >nul & echo only"')
+})
+
+test('composeShellCommand handles postCommand with no main command (bash)', () => {
+  const out = composeShellCommand({ profile: 'bash', postCommand: 'echo only', postDelay: 2 })
+  assert.equal(out, 'bash -i -c "sleep 2; echo only; exec bash"')
+})
+
+test('composeShellCommand returns empty when both command and postCommand absent', () => {
+  assert.equal(composeShellCommand({ profile: 'pwsh' }), '')
+  assert.equal(composeShellCommand({ profile: 'pwsh', postCommand: '' }), '')
+})
+
+test('composeShellCommand ignores non-numeric postDelay (uses default 3)', () => {
+  const out = composeShellCommand({ profile: 'pwsh', command: 'a', postCommand: 'b', postDelay: 'two' })
+  assert.equal(out, 'powershell -NoExit -Command "a; Start-Sleep -Seconds 3; b"')
+})
+
+test('composeShellCommand clamps negative postDelay to 0', () => {
+  const out = composeShellCommand({ profile: 'pwsh', command: 'a', postCommand: 'b', postDelay: -5 })
+  assert.equal(out, 'powershell -NoExit -Command "a; Start-Sleep -Seconds 0; b"')
+})
+
+test('buildWtCommand emits postCommand-bearing pane through wrapped shell', () => {
+  const layout = {
+    window: 'w',
+    tabs: [{
+      title: 'T',
+      panes: [{ profile: 'pwsh', command: 'main', postCommand: 'after', postDelay: 1 }],
+    }],
+  }
+  const cmd = buildWtCommand(layout)
+  assert.match(cmd, /powershell -NoExit -Command "main; Start-Sleep -Seconds 1; after"/)
+})
+
 test('buildWtCommand throws on empty layout', () => {
   assert.throws(() => buildWtCommand({}), /at least one tab/)
 })
