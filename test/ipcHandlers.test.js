@@ -67,6 +67,11 @@ function makeSpawnStub(plan) {
   return fn
 }
 
+function decodedPwshScripts(cmd) {
+  return [...cmd.matchAll(/powershell -NoExit -EncodedCommand ([A-Za-z0-9+/=]+)/g)]
+    .map(match => Buffer.from(match[1], 'base64').toString('utf16le'))
+}
+
 async function tmpdir(prefix = 'wtw-ipc-') {
   return realFs.mkdtemp(path.join(os.tmpdir(), prefix))
 }
@@ -299,20 +304,16 @@ test('layouts:preview returns wt command string', async () => {
   assert.match(cmd, /^wt(\.exe)? /)
 })
 
-test('layouts:run spawns wt via argv form with shell wrapper split into separate tokens', async () => {
-  // Two-part regression fix:
-  // 1. spawn argv-form (not shell:true) avoids cmd.exe quote-mangling.
-  // 2. The shell wrapper (powershell -NoExit -Command <script>) is pushed as
-  //    SEPARATE argv tokens — not as a single string with embedded quotes —
-  //    because wt's commandline-rebuilder naively wraps any element with
-  //    whitespace in "..." without escaping inner quotes, producing broken
-  //    child commandlines like `"powershell -NoExit -Command "<script>""`
-  //    that CreateProcess can't parse (error 0x80070002).
+test('layouts:run launches via cmd.exe command string with WT-safe separators', async () => {
+  // Direct argv-form keeps literal inner quotes inside command tokens. Launch
+  // through cmd.exe so WT receives clean tokens and real semicolon separators.
   const ipc = makeIpcStub()
   const spawn = makeSpawnStub((cmd, args, opts) => {
-    assert.equal(cmd, 'wt', 'spawn cmd should be bare "wt", not a shell string')
+    assert.equal(cmd, 'cmd.exe')
     assert.ok(Array.isArray(args), 'spawn args should be an argv array')
-    assert.ok(!opts || !opts.shell, 'shell:true mangles inner quotes — must be off')
+    assert.deepEqual(args.slice(0, 2), ['/d', '/c'])
+    assert.ok(!opts || !opts.shell, 'shell:true should stay off; cmd.exe is launched directly')
+    assert.equal(opts.windowsVerbatimArguments, true)
     return { code: 0 }
   })
   ipcHandlers.register({
@@ -322,21 +323,65 @@ test('layouts:run spawns wt via argv form with shell wrapper split into separate
   })
   const layout = {
     name: 'L',
-    tabs: [{ panes: [{ profile: 'Windows PowerShell', command: 'npx paperclipai run' }] }],
+    window: 'L',
+    tabs: [
+      { panes: [{ profile: 'Windows PowerShell', command: 'npx paperclipai run' }] },
+      { panes: [{ profile: 'Command Prompt' }] },
+    ],
   }
   const res = await ipc.invoke('layouts:run', layout)
   assert.ok(Array.isArray(res.argv))
   assert.match(res.preview, /^wt/)
+  assert.match(res.runCommand, /^wt\.exe /)
   assert.equal(res.pid, 4242)
   assert.equal(spawn.calls.length, 1)
-  const passed = spawn.calls[0].args
-  // Tail = pwsh wrapper split across 4 argv tokens.
-  const tail = passed.slice(-4)
-  assert.deepEqual(
-    tail,
-    ['powershell', '-NoExit', '-Command', 'npx paperclipai run'],
-    `expected pwsh wrapper split into 4 argv tokens, got: ${JSON.stringify(passed)}`,
-  )
+  const passed = spawn.calls[0].args[2]
+  assert.ok(passed.includes(' ; '), `expected real WT separators: ${passed}`)
+  assert.ok(!passed.includes('\\;'), `backslash-semicolon is passed to pane commands from cmd.exe: ${passed}`)
+  assert.match(passed, /powershell -NoExit -EncodedCommand /)
+  assert.deepEqual(decodedPwshScripts(passed), ['npx paperclipai run'])
+  assert.doesNotMatch(passed, /"powershell -NoExit -Command "npx paperclipai run""/)
+})
+
+test('layouts:run wraps no-profile commands using Windows Terminal default profile kind', async () => {
+  const temp = await tmpdir()
+  const origLocal = process.env.LOCALAPPDATA
+  const settingsDir = path.join(temp, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState')
+  await realFs.mkdir(settingsDir, { recursive: true })
+  await realFs.writeFile(path.join(settingsDir, 'settings.json'), JSON.stringify({
+    defaultProfile: '{0caa0dad-35be-5f56-a8ff-afceeeaa6101}',
+    profiles: {
+      list: [
+        {
+          guid: '{0caa0dad-35be-5f56-a8ff-afceeeaa6101}',
+          name: 'Command Prompt',
+          commandline: 'cmd.exe',
+        },
+      ],
+    },
+  }), 'utf8')
+  process.env.LOCALAPPDATA = temp
+  try {
+    const ipc = makeIpcStub()
+    const spawn = makeSpawnStub(() => ({ code: 0 }))
+    ipcHandlers.register({
+      ipcMain: ipc, dialog: {}, shell: {}, fs: realFs, fsSync: realFsSync,
+      spawn, store: makeMemoryStore(),
+      getMainWindow: () => null, env: {},
+    })
+    const layout = {
+      name: 'L',
+      window: 'L',
+      tabs: [{ title: 'Default', panes: [{ dir: 'C:\\dev', command: 'ls' }] }],
+    }
+    const res = await ipc.invoke('layouts:run', layout)
+    assert.match(res.runCommand, /new-tab --title Default -d C:\\dev cmd \/k ls/)
+    assert.doesNotMatch(res.runCommand, /powershell -NoExit -Command "ls"/)
+    assert.ok(!res.runCommand.includes(' -p '), `default profile pane should not emit -p: ${res.runCommand}`)
+  } finally {
+    if (origLocal === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = origLocal
+  }
 })
 
 test('config:get returns store data and nulls non-directory lastDir', async () => {
@@ -649,6 +694,57 @@ test('wt:applyStyle returns no-op result when layout has no windowStyle', async 
   assert.equal(res.applied.profile, false)
   assert.equal(res.applied.window, false)
   assert.equal(res.fragmentPath, null)
+})
+
+test('wt:applyStyle refreshes settings after profile-only fragment write', async (t) => {
+  const temp = await tmpdir()
+  const origLocal = process.env.LOCALAPPDATA
+  t.after(async () => {
+    if (origLocal === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = origLocal
+    await realFs.rm(temp, { recursive: true, force: true })
+  })
+
+  const settingsDir = path.join(temp, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState')
+  await realFs.mkdir(settingsDir, { recursive: true })
+  const settingsPath = path.join(settingsDir, 'settings.json')
+  const settingsRaw = JSON.stringify({
+    profiles: {
+      list: [
+        { name: 'pwsh', guid: '{base-pwsh}', commandline: 'powershell.exe' },
+      ],
+    },
+  }, null, 2) + '\n'
+  await realFs.writeFile(settingsPath, settingsRaw, 'utf8')
+  process.env.LOCALAPPDATA = temp
+
+  const writes = []
+  const fsSpy = Object.create(realFs)
+  fsSpy.writeFile = async (file, content, enc) => {
+    writes.push({ file, content })
+    return realFs.writeFile(file, content, enc)
+  }
+
+  const ipc = makeIpcStub()
+  ipcHandlers.register({
+    ipcMain: ipc, dialog: {}, shell: {}, fs: fsSpy, fsSync: realFsSync,
+    spawn: makeSpawnStub([]), store: makeMemoryStore(),
+    getMainWindow: () => null, env: { LOCALAPPDATA: temp },
+  })
+
+  const layout = {
+    name: 'L',
+    window: 'L',
+    windowStyle: { background: '#112233' },
+    tabs: [{ title: 'T', panes: [{ profile: 'pwsh' }] }],
+  }
+  const res = await ipc.invoke('wt:applyStyle', layout)
+  assert.equal(res.applied.profile, true)
+  assert.equal(res.applied.window, false)
+  assert.equal(res.settingsPath, settingsPath)
+  assert.equal(res.backupPath, null)
+  assert.ok(writes.some(w => path.basename(w.file).startsWith('settings.json.wtw-tmp-') && w.content === settingsRaw))
+  assert.equal(await realFs.readFile(settingsPath, 'utf8'), settingsRaw)
 })
 
 test('wt:applyStyle catches errors and returns {error}', async () => {

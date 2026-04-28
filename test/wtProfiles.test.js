@@ -10,6 +10,9 @@ const {
   stripJsonc,
   stripTrailingCommas,
   discoverProfiles,
+  findDefaultProfile,
+  profileShellKind,
+  defaultProfileShellKind,
   DEFAULT_FALLBACK,
 } = require('../src/wtProfiles')
 
@@ -59,6 +62,26 @@ test('readProfilesFromFile parses WT-style JSONC fixture', () => {
     'Ubuntu-22.04',
     'Azure Cloud Shell',
   ])
+})
+
+test('findDefaultProfile resolves WT defaultProfile GUID to profile object', () => {
+  const settings = parseJsonc(require('node:fs').readFileSync(fixture, 'utf8'))
+  const profile = findDefaultProfile(settings)
+  assert.equal(profile.name, 'Windows PowerShell')
+  assert.equal(defaultProfileShellKind(settings), 'pwsh')
+})
+
+test('defaultProfileShellKind resolves Command Prompt default GUID to cmd', () => {
+  const settings = parseJsonc(require('node:fs').readFileSync(fixture, 'utf8'))
+  settings.defaultProfile = '{0caa0dad-35be-5f56-a8ff-afceeeaa6101}'
+  assert.equal(findDefaultProfile(settings).name, 'Command Prompt')
+  assert.equal(defaultProfileShellKind(settings), 'cmd')
+})
+
+test('profileShellKind infers shell from commandline and source', () => {
+  assert.equal(profileShellKind({ name: 'Custom', commandline: 'C:\\Windows\\System32\\cmd.exe' }), 'cmd')
+  assert.equal(profileShellKind({ name: 'Custom', commandline: 'pwsh.exe -NoLogo' }), 'pwsh')
+  assert.equal(profileShellKind({ name: 'Distro', source: 'Windows.Terminal.Wsl' }), 'bash')
 })
 
 test('discoverProfiles falls back when no settings found', () => {

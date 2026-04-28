@@ -1,8 +1,8 @@
 'use strict'
 
 const path = require('node:path')
-const { buildWtArgv, buildWtCommand, profileKind } = require('./wtCommand')
-const { discoverProfiles, parseJsonc, candidateSettingsPaths } = require('./wtProfiles')
+const { buildWtArgv, buildWtCmdCommand, buildWtCommand, profileKind } = require('./wtCommand')
+const { discoverProfiles, parseJsonc, candidateSettingsPaths, defaultProfileShellKind } = require('./wtProfiles')
 const styleApply = require('./wtStyleApply')
 const startupRestore = require('./wtStartupRestore')
 const { listEntries, moveLayoutFile, saveLayoutFile, saveNewLayoutFile } = require('./layouts')
@@ -70,6 +70,7 @@ function register(deps) {
     const settingsPath = findExistingSettingsPath()
     let settings = null
     let settingsRaw = null
+    let settingsWritten = false
     if (settingsPath) {
       try {
         settingsRaw = await fs.readFile(settingsPath, 'utf8')
@@ -108,9 +109,18 @@ function register(deps) {
             styleSession.recordSnapshot(settingsPath, settingsRaw, patched)
           }
           await writeFileAtomic(fs, settingsPath, patched)
+          settingsWritten = true
           result.applied.window = true
         }
       }
+    }
+
+    if (result.applied.profile && !settingsWritten && settingsPath && settingsRaw !== null && settings) {
+      // WT does not reliably notice a newly written fragment before launch
+      // unless settings.json reloads. Rewriting the original bytes updates the
+      // file timestamp without changing the user's settings or creating a
+      // restore snapshot.
+      await writeFileAtomic(fs, settingsPath, settingsRaw)
     }
 
     return result
@@ -261,12 +271,22 @@ function register(deps) {
   })
 
   async function defaultShellKindFromSettings() {
+    async function wtDefaultShellKind() {
+      const settingsPath = findExistingSettingsPath()
+      if (!settingsPath) return null
+      try {
+        const raw = await fs.readFile(settingsPath, 'utf8')
+        return defaultProfileShellKind(parseJsonc(raw))
+      } catch (_) {
+        return null
+      }
+    }
     try {
       const data = await store.read()
       const dp = data && typeof data.defaultProfile === 'string' ? data.defaultProfile : ''
-      return profileKind(dp) || null
+      return profileKind(dp) || await wtDefaultShellKind()
     } catch (_) {
-      return null
+      return wtDefaultShellKind()
     }
   }
 
@@ -287,15 +307,19 @@ function register(deps) {
     const defaultShellKind = await defaultShellKindFromSettings()
     const argv = buildWtArgv(effective, { defaultShellKind })
     const preview = buildWtCommand(effective, { defaultShellKind })
-    // Spawn argv-form (no shell:true) — cmd.exe does not understand the \"
-    // escapes that quoteArgvForWt emits, so routing through it corrupts the
-    // wrapped commandline and wt tries to launch the whole quoted blob as an
-    // exe (CreateProcess error 0x80070002). Calling spawn('wt', argv) lets
-    // node's win32 escape build CommandLineToArgvW-compatible output that wt
-    // unparses correctly.
-    const child = spawn('wt', argv, { detached: true, stdio: 'ignore', windowsHide: true })
+    const runCommand = buildWtCmdCommand(effective, { defaultShellKind })
+    // Launch through cmd.exe with real WT `;` separators. Direct
+    // argv-form launches preserve literal inner quotes inside command tokens
+    // (for example `claude "start terse"`), which WT can misparse before later
+    // tab segments. Letting cmd.exe tokenize gives WT clean commandline argv.
+    const child = spawn('cmd.exe', ['/d', '/c', runCommand], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      windowsVerbatimArguments: true,
+    })
     if (child && typeof child.unref === 'function') child.unref()
-    return { argv, preview, pid: child && child.pid, style: applyResult }
+    return { argv, preview, runCommand, pid: child && child.pid, style: applyResult }
   })
 
   ipcMain.handle('layouts:preview', async (_e, layout) => {

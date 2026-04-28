@@ -2,9 +2,9 @@
 
 ;(function () {
   const KEYS = [
-    { key: 'background',             type: 'color',  label: 'Background',           hint: '#rrggbb' },
+    { key: 'background',             type: 'color',  label: 'Background',           hint: '#rrggbb', help: 'Applied through temporary WT profiles when you run the layout.' },
     { key: 'unfocusedBackground',    type: 'color',  label: 'Unfocused background', hint: '#rrggbb' },
-    { key: 'useMica',                type: 'bool',   label: 'Use Mica' },
+    { key: 'useMica',                type: 'bool',   label: 'Use Mica',             help: 'Unset keeps the current WT setting; background colors do not require this field.' },
     { key: 'showTabsInTitlebar',     type: 'bool',   label: 'Tabs in titlebar' },
     { key: 'useAcrylicInTabRow',     type: 'bool',   label: 'Acrylic tab row' },
     { key: 'opacity',                type: 'percent', label: 'Opacity (%)',          hint: '0-100' },

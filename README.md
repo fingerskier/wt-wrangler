@@ -46,7 +46,7 @@ When both are set, `WRANGLER_SIGN_PARAMS` wins. With neither, `npm run make` pro
 
 Building a chained `wt.exe` invocation has two non-obvious rules. Both are encoded in `src/wtCommand.js` and both matter for multi-tab layouts.
 
-1. **Repeat `-w <name>` on every subcommand.** `-w new` is a keyword that only scopes to the first subcommand; once a chained `;` appears, any later `new-tab` or `split-pane` that carries a commandline will spawn a separate window instead of attaching. Use a concrete name — either the layout's `window` field or an auto-generated `wtw-<timestamp>-<suffix>` — and emit `-w <name>` before every segment. The first subcommand creates the window by that name, the rest attach to it.
+1. **Target every `new-tab`, but not `split-pane`.** `-w new` is a keyword that only scopes to the first subcommand; once a chained `;` appears, a later `new-tab` that carries a commandline can spawn separately instead of attaching. Use a concrete name — either the layout's `window` field or an auto-generated `wtw-<timestamp>-<suffix>` — and emit `-w <name>` before each `new-tab`. Do not emit `-w` before `split-pane`; splits must stay in the current tab context.
 
 2. **Wrap every pane command through the profile's shell.** `wt`'s commandline positional requires an *executable*. A bare shell builtin like `dir` or `ls` has no `.exe` to launch, so `wt` silently drops that chained subcommand — which looks like "only the first tab opens" whenever any later tab uses a builtin. wt-wrangler wraps every pane command through the profile's shell so builtins, aliases, and shell functions all launch, and the tab stays open for output:
 
@@ -54,9 +54,22 @@ Building a chained `wt.exe` invocation has two non-obvious rules. Both are encod
     | ----------------------------- | -------------------------------------------- |
     | `cmd` / `Command Prompt`      | `cmd /k <cmd>`                               |
     | `bash` / `wsl` / `ubuntu`     | `bash -i -c "<cmd>; exec bash"`              |
-    | `pwsh` / default / everything else | `powershell -NoExit -Command "<cmd>"`   |
+    | `pwsh` / everything else           | `powershell -NoExit -Command "<cmd>"`   |
 
-A third rule lives in `src/ipcHandlers.js` (the IPC layer extracted from `main.js`): the process is spawned as `spawn(cmdString, { shell: true, ... })`. `shell: true` is required so that cmd.exe tokenizes the literal `;` as its own argv element before it reaches `wt.exe`.
+    Panes with no `profile` keep WT's `(default)` profile (`-p` is omitted), but Wrangler still reads WT's `defaultProfile` from `settings.json` to choose the matching wrapper. If the WT default profile is Command Prompt, a no-profile `ls` pane is launched as `cmd /k ls`; if Wrangler cannot read the default profile, it falls back to PowerShell.
+
+A third rule lives in `src/ipcHandlers.js` (the IPC layer extracted from `main.js`): the process is spawned as `cmd.exe /d /c <wt.exe ...>` with verbatim arguments. That lets cmd.exe tokenize pane commands like `claude "start terse"` cleanly while preserving literal `;` WT separators between `new-tab` and `split-pane` subcommands.
+
+For actual `Run` launches, PowerShell pane scripts are sent with `-EncodedCommand` so nested quotes survive the `cmd.exe` launch hop. The command preview remains readable and still displays the unencoded script.
+
+## Window styles
+
+Layout-level `windowStyle` settings are split across two Windows Terminal mechanisms:
+
+- Profile appearance keys (`background`, `unfocusedBackground`, `opacity`, `backgroundImage`, `backgroundImageOpacity`) are applied through hidden transient WT profile fragments, then pane profile names are remapped for launch.
+- Window/root keys (`useMica`, `showTabsInTitlebar`, `useAcrylicInTabRow`) are applied to WT `settings.json` for the launch session and restored when Wrangler exits.
+
+`useMica` does not need to be set for `background` to work. When a layout only changes profile appearance keys, Wrangler rewrites the original `settings.json` bytes after writing the fragment so WT reloads its profile list before launch. Leaving `Use Mica` unset means "do not change the user's current WT setting."
 
 ## Data Format
 ```json

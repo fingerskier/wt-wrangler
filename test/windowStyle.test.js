@@ -18,6 +18,12 @@ test('KEYS lists exactly the supported settings', () => {
   ])
 })
 
+test('KEYS explains Use Mica unset behavior', () => {
+  const useMica = WS.KEYS.find(k => k.key === 'useMica')
+  assert.match(useMica.help, /Unset keeps the current WT setting/)
+  assert.match(useMica.help, /background colors do not require/i)
+})
+
 test('normalize undefined yields object with all keys undefined', () => {
   const out = WS.normalize(undefined)
   assert.equal(typeof out, 'object')

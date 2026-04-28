@@ -1202,12 +1202,7 @@ function renderStyleField(def) {
     row.appendChild(control)
     row.appendChild(pick)
     wrap.appendChild(row)
-    if (def.hint) {
-      const hint = document.createElement('span')
-      hint.className = 'modal-field-hint'
-      hint.textContent = def.hint
-      wrap.appendChild(hint)
-    }
+    appendStyleHelp(wrap, def)
     return wrap
   } else {
     // color / string
@@ -1233,22 +1228,21 @@ function renderStyleField(def) {
     row.appendChild(control)
     row.appendChild(swatch)
     wrap.appendChild(row)
-    if (def.hint) {
-      const hint = document.createElement('span')
-      hint.className = 'modal-field-hint'
-      hint.textContent = def.hint
-      wrap.appendChild(hint)
-    }
+    appendStyleHelp(wrap, def)
     return wrap
   }
   wrap.appendChild(control)
-  if (def.hint) {
-    const hint = document.createElement('span')
-    hint.className = 'modal-field-hint'
-    hint.textContent = def.hint
-    wrap.appendChild(hint)
-  }
+  appendStyleHelp(wrap, def)
   return wrap
+}
+
+function appendStyleHelp(wrap, def) {
+  const text = def.help || def.hint
+  if (!text) return
+  const hint = document.createElement('span')
+  hint.className = 'modal-field-hint'
+  hint.textContent = text
+  wrap.appendChild(hint)
 }
 
 function isHex(s) {

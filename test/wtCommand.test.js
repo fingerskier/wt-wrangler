@@ -2,7 +2,7 @@
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { buildWtCommand, buildWtArgv, composeShellCommand, composeShellArgv, resolveWindowTarget } = require('../src/wtCommand')
+const { buildWtCommand, buildWtCmdCommand, buildWtArgv, composeShellCommand, composeShellArgv, resolveWindowTarget } = require('../src/wtCommand')
 
 const readmeLayout = {
   name: 'dev-cockpit',
@@ -25,6 +25,11 @@ const readmeLayout = {
   ],
 }
 
+function decodedPwshScripts(cmd) {
+  return [...cmd.matchAll(/powershell -NoExit -EncodedCommand ([A-Za-z0-9+/=]+)/g)]
+    .map(match => Buffer.from(match[1], 'base64').toString('utf16le'))
+}
+
 test('buildWtCommand produces wt invocation with window, tabs and splits', () => {
   const cmd = buildWtCommand(readmeLayout)
   assert.ok(cmd.startsWith('wt -w dev new-tab '), cmd)
@@ -34,30 +39,104 @@ test('buildWtCommand produces wt invocation with window, tabs and splits', () =>
   // splits the shell wrapper into separate argv tokens (see composeShellArgv).
   // The string preview here is for display only.
   assert.match(cmd, /-w dev new-tab --title App -p pwsh -d C:\\dev\\my-app powershell -NoExit -Command "npm run dev"/)
-  assert.match(cmd, /-w dev split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app cmd \/k npm test/)
-  assert.match(cmd, /-w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server powershell -NoExit -Command "npm run server"/)
-  assert.match(cmd, /-w dev split-pane -H --size 0\.4 -p pwsh powershell -NoExit -Command "npm run logs"/)
+  assert.match(cmd, /; split-pane -V --size 0\.35 -p cmd -d C:\\dev\\my-app cmd \/k npm test/)
+  assert.match(cmd, /; -w dev new-tab --title Server -p pwsh -d C:\\dev\\my-app\\server powershell -NoExit -Command "npm run server"/)
+  assert.match(cmd, /; split-pane -H --size 0\.4 -p pwsh powershell -NoExit -Command "npm run logs"/)
   const tabSeps = cmd.split(' ; ').length - 1
   assert.equal(tabSeps, 3, `expected 3 " ; " separators, got ${tabSeps}: ${cmd}`)
 })
 
-test('buildWtCommand repeats -w <name> on every subcommand segment', () => {
+test('buildWtCommand targets each new-tab but not split-pane segments', () => {
   const cmd = buildWtCommand(readmeLayout)
   const wCount = (cmd.match(/-w dev /g) || []).length
-  assert.equal(wCount, 4, `expected -w dev on all 4 segments, got ${wCount}: ${cmd}`)
+  assert.equal(wCount, 2, `expected -w dev once per tab, got ${wCount}: ${cmd}`)
+  assert.doesNotMatch(cmd, /; -w dev split-pane/, `split-pane should keep the current tab context: ${cmd}`)
 })
 
-test('buildWtArgv repeats -w token before every subcommand', () => {
+test('buildWtArgv targets each new-tab but not split-pane segments', () => {
   const argv = buildWtArgv(readmeLayout)
-  assert.deepEqual(argv.slice(0, 2), ['-w', 'dev'])
+  assert.deepEqual(argv.slice(0, 3), ['-w', 'dev', 'new-tab'])
   const semicolons = argv.filter(tok => tok === ';').length
   assert.equal(semicolons, 3)
   const wFlags = argv.filter(tok => tok === '-w').length
-  assert.equal(wFlags, 4, `expected -w before each of 4 segments, got ${wFlags}`)
+  assert.equal(wFlags, 2, `expected one -w per tab, got ${wFlags}`)
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== 'split-pane') continue
+    const segmentStart = argv.lastIndexOf(';', i) + 1
+    const segment = argv.slice(segmentStart, i + 1)
+    assert.ok(!segment.includes('-w'), `split-pane should not be directly window-targeted: ${JSON.stringify(argv)}`)
+  }
   assert.ok(argv.includes('new-tab'))
   assert.ok(argv.includes('split-pane'))
   assert.ok(argv.includes('-V'))
   assert.ok(argv.includes('-H'))
+})
+
+test('buildWtArgv preserves dev layout shape: split first tab only, then open second tab', () => {
+  const argv = buildWtArgv({
+    name: 'dev',
+    window: 'dev',
+    tabs: [
+      {
+        title: 'Tab 1',
+        panes: [
+          { profile: 'Command Prompt', dir: '\\dev', command: 'claude "start terse"' },
+          { split: 'down', profile: 'Command Prompt', dir: '\\dev' },
+        ],
+      },
+      {
+        title: 'Tab 2',
+        panes: [{ dir: 'C:\\dev', command: 'ls' }],
+      },
+    ],
+  })
+  assert.deepEqual(argv, [
+    '-w', 'dev',
+    'new-tab', '--title', 'Tab 1', '-p', 'Command Prompt', '-d', '\\dev', 'cmd', '/k', 'claude "start terse"',
+    ';',
+    'split-pane', '-H', '-p', 'Command Prompt', '-d', '\\dev',
+    ';',
+    '-w', 'dev', 'new-tab', '--title', 'Tab 2', '-d', 'C:\\dev', 'powershell', '-NoExit', '-Command', 'ls',
+  ])
+})
+
+test('buildWtCmdCommand uses real WT separators for dev layout launch', () => {
+  const cmd = buildWtCmdCommand({
+    name: 'dev',
+    window: 'dev',
+    tabs: [
+      {
+        title: 'Tab 1',
+        panes: [
+          { profile: 'Command Prompt', dir: '\\dev', command: 'claude "start terse"' },
+          { split: 'down', profile: 'Command Prompt', dir: '\\dev' },
+        ],
+      },
+      {
+        title: 'Tab 2',
+        panes: [{ dir: 'C:\\dev', command: 'ls' }],
+      },
+    ],
+  })
+  assert.equal(
+    cmd,
+    'wt.exe -w dev new-tab --title "Tab 1" -p "Command Prompt" -d \\dev cmd /k claude "start terse" ; split-pane -H -p "Command Prompt" -d \\dev ; -w dev new-tab --title "Tab 2" -d C:\\dev powershell -NoExit -EncodedCommand bABzAA==',
+  )
+})
+
+test('buildWtCmdCommand encodes pwsh scripts so embedded quotes survive cmd.exe launch', () => {
+  const cmd = buildWtCmdCommand({
+    name: 'dev',
+    window: 'dev',
+    tabs: [{
+      title: 'Tab 1',
+      panes: [{ profile: 'Windows PowerShell', dir: '\\dev', command: 'claude "start terse"' }],
+    }],
+  })
+  assert.match(cmd, /-p "Windows PowerShell"/)
+  assert.match(cmd, /powershell -NoExit -EncodedCommand /)
+  assert.doesNotMatch(cmd, /-Command "claude/)
+  assert.deepEqual(decodedPwshScripts(cmd), ['claude "start terse"'])
 })
 
 test('composeShellCommand wraps bare cmd builtin so dir-style commands launch', () => {
@@ -167,11 +246,11 @@ test('buildWtCommand emits postCommand-bearing pane through wrapped shell', () =
 
 // --- Regression: (default) profile and embedded-quote preservation -----
 
-test('composeShellCommand returns BARE main when no profile/shellKind/default given', () => {
-  // Prior bug: empty profile defaulted to pwsh wrap, forcing PowerShell even
-  // when WT's default profile was Command Prompt.
+test('composeShellCommand defaults no-profile commands to a shell wrapper', () => {
+  // Bare builtins/aliases like `ls` are not executables; WT drops later chained
+  // tabs when they are emitted directly.
   const out = composeShellCommand({ command: 'claude "start terse"' })
-  assert.equal(out, 'claude "start terse"')
+  assert.equal(out, 'powershell -NoExit -Command "claude \\"start terse\\""')
 })
 
 test('composeShellCommand uses defaultShellKind when pane has no profile/shellKind', () => {
@@ -203,14 +282,14 @@ test('buildWtCommand respects defaultShellKind for empty-profile panes', () => {
   assert.ok(!/-p /.test(withCmd), 'no -p emitted when pane.profile is empty')
 })
 
-test('buildWtCommand emits bare command when profile empty AND no defaultShellKind', () => {
+test('buildWtCommand wraps empty-profile commands when no defaultShellKind is configured', () => {
   const layout = {
     window: 'X',
     tabs: [{ title: 'T', panes: [{ command: 'claude "start terse"' }] }],
   }
   const cmd = buildWtCommand(layout)
-  assert.match(cmd, /claude "start terse"/)
-  assert.ok(!/powershell/.test(cmd), 'no powershell wrap when (default)')
+  assert.match(cmd, /powershell -NoExit -Command "claude \\"start terse\\""/)
+  assert.ok(!/-p /.test(cmd), 'no -p emitted when pane.profile is empty')
 })
 
 test('buildWtArgv splits shell wrapper into separate argv tokens (avoids wt re-wrap mangling)', () => {
@@ -270,10 +349,10 @@ test('composeShellArgv returns [] when no command/postCommand', () => {
   assert.deepEqual(composeShellArgv({ profile: 'pwsh' }), [])
 })
 
-test('composeShellArgv returns [main] when no shell kind resolvable', () => {
+test('composeShellArgv defaults no-profile commands to pwsh argv wrapper', () => {
   assert.deepEqual(
     composeShellArgv({ command: 'claude "start terse"' }),
-    ['claude "start terse"'],
+    ['powershell', '-NoExit', '-Command', 'claude "start terse"'],
   )
 })
 

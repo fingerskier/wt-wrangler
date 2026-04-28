@@ -73,6 +73,56 @@ function extractProfileNames(settings) {
   return names.filter(n => (seen.has(n) ? false : (seen.add(n), true)))
 }
 
+function profileList(settings) {
+  if (!settings || typeof settings !== 'object') return []
+  const list = settings.profiles && Array.isArray(settings.profiles.list)
+    ? settings.profiles.list
+    : Array.isArray(settings.profiles) ? settings.profiles : []
+  return list.filter(p => p && typeof p === 'object' && p.hidden !== true)
+}
+
+function normalizeProfileId(value) {
+  if (typeof value !== 'string') return ''
+  return value.trim().replace(/^\{|\}$/g, '').toLowerCase()
+}
+
+function findDefaultProfile(settings) {
+  if (!settings || typeof settings !== 'object') return null
+  const target = typeof settings.defaultProfile === 'string' ? settings.defaultProfile.trim() : ''
+  if (!target) return null
+  const targetId = normalizeProfileId(target)
+  const targetName = target.toLowerCase()
+  for (const profile of profileList(settings)) {
+    const guid = normalizeProfileId(profile.guid)
+    if (guid && guid === targetId) return profile
+    const name = typeof profile.name === 'string' ? profile.name.trim().toLowerCase() : ''
+    if (name && name === targetName) return profile
+  }
+  return null
+}
+
+function profileShellKind(profileOrName) {
+  const profile = typeof profileOrName === 'string' ? { name: profileOrName } : profileOrName
+  if (!profile || typeof profile !== 'object') return null
+  const name = typeof profile.name === 'string' ? profile.name.toLowerCase() : ''
+  const commandline = typeof profile.commandline === 'string' ? profile.commandline.toLowerCase() : ''
+  const source = typeof profile.source === 'string' ? profile.source.toLowerCase() : ''
+  const text = `${name} ${commandline} ${source}`
+  if (/\bcmd(?:\.exe)?\b/.test(commandline) || name === 'cmd' || name.includes('command prompt')) return 'cmd'
+  if (text.includes('bash') || text.includes('wsl') || text.includes('ubuntu')) return 'bash'
+  if (text.includes('powershell') || text.includes('pwsh')) return 'pwsh'
+  return null
+}
+
+function defaultProfileShellKind(settings) {
+  const profile = findDefaultProfile(settings)
+  if (profile) return profileShellKind(profile)
+  if (settings && typeof settings.defaultProfile === 'string') {
+    return profileShellKind(settings.defaultProfile)
+  }
+  return null
+}
+
 function readProfilesFromFile(filePath) {
   const raw = fs.readFileSync(filePath, 'utf8')
   return extractProfileNames(parseJsonc(raw))
@@ -110,6 +160,9 @@ module.exports = {
   parseJsonc,
   stripJsonc,
   stripTrailingCommas,
+  findDefaultProfile,
+  profileShellKind,
+  defaultProfileShellKind,
   candidateSettingsPaths,
   DEFAULT_FALLBACK,
 }
