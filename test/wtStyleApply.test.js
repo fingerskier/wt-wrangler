@@ -155,3 +155,41 @@ test('remapLayoutProfiles stashes original shellKind so shell wrapper survives r
   assert.equal(next.tabs[0].panes[0].profile, 'wtw-cwin-Command_Prompt')
   assert.equal(next.tabs[0].panes[0].shellKind, 'cmd')
 })
+
+// --- computeWindowKeyDelta -------------------------------------------------
+
+test('computeWindowKeyDelta records had:true with original value when key present', () => {
+  const orig = { useMica: false, showTabsInTitlebar: true }
+  const style = { useMica: true, showTabsInTitlebar: false }
+  const d = A.computeWindowKeyDelta(orig, style)
+  assert.deepEqual(d.useMica, { had: true, original: false, patched: true })
+  assert.deepEqual(d.showTabsInTitlebar, { had: true, original: true, patched: false })
+})
+
+test('computeWindowKeyDelta records had:false when key absent in original', () => {
+  const orig = { useMica: false }
+  const style = { useMica: true, useAcrylicInTabRow: true }
+  const d = A.computeWindowKeyDelta(orig, style)
+  assert.deepEqual(d.useMica, { had: true, original: false, patched: true })
+  assert.deepEqual(d.useAcrylicInTabRow, { had: false, patched: true })
+})
+
+test('computeWindowKeyDelta returns {} when style has no window keys', () => {
+  const orig = { useMica: false }
+  const style = { background: '#000', opacity: 80 } // profile keys only
+  const d = A.computeWindowKeyDelta(orig, style)
+  assert.deepEqual(d, {})
+})
+
+test('computeWindowKeyDelta tolerates null/undefined original', () => {
+  const style = { useMica: true }
+  assert.deepEqual(A.computeWindowKeyDelta(null, style), { useMica: { had: false, patched: true } })
+  assert.deepEqual(A.computeWindowKeyDelta(undefined, style), { useMica: { had: false, patched: true } })
+})
+
+test('computeWindowKeyDelta ignores style keys that are not WINDOW_KEYS', () => {
+  const orig = { useMica: false, background: '#abc' }
+  const style = { useMica: true, background: '#123' }
+  const d = A.computeWindowKeyDelta(orig, style)
+  assert.deepEqual(Object.keys(d), ['useMica'])
+})

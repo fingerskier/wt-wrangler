@@ -151,6 +151,68 @@ test('cleanupBackupsFor no-ops when no backups exist', async () => {
   assert.deepEqual(out.errors, [])
 })
 
+// --- surgicalRestoreFromBackup ---------------------------------------------
+
+const WIN_KEYS = ['useMica', 'showTabsInTitlebar', 'useAcrylicInTabRow']
+
+test('surgicalRestoreFromBackup reverts only window keys, leaves other keys intact', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const backup = `${settings}.wtw-backup-2026-04-29T14-12-04-026Z`
+  const backupRaw = '{"useMica":false,"showTabsInTitlebar":true,"profiles":{"list":[{"name":"pwsh"}]}}'
+  // Current has Wrangler's patches AND a fresh user-added scheme + profile that must survive.
+  const currentRaw = '{"useMica":true,"showTabsInTitlebar":false,"profiles":{"list":[{"name":"pwsh"},{"name":"new-user-profile"}]},"schemes":[{"name":"USER-NEW"}]}'
+  const fs = memFs({ [settings]: currentRaw, [backup]: backupRaw })
+  const out = await R.surgicalRestoreFromBackup(settings, backup, fs, WIN_KEYS)
+  assert.equal(out.mode, 'surgical')
+  assert.equal(out.changed, true)
+  const written = JSON.parse(fs.files.get(settings))
+  assert.equal(written.useMica, false)
+  assert.equal(written.showTabsInTitlebar, true)
+  assert.equal(written.profiles.list.length, 2)
+  assert.deepEqual(written.schemes, [{ name: 'USER-NEW' }])
+})
+
+test('surgicalRestoreFromBackup deletes keys present in current but absent in backup', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const backup = `${settings}.wtw-backup-stamp`
+  const backupRaw = '{}' // no useMica originally
+  const currentRaw = '{"useMica":true,"otherUserKey":"keep-me"}'
+  const fs = memFs({ [settings]: currentRaw, [backup]: backupRaw })
+  await R.surgicalRestoreFromBackup(settings, backup, fs, WIN_KEYS)
+  const written = JSON.parse(fs.files.get(settings))
+  assert.equal('useMica' in written, false)
+  assert.equal(written.otherUserKey, 'keep-me')
+})
+
+test('surgicalRestoreFromBackup falls back to bulk write when JSON parse fails', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const backup = `${settings}.wtw-backup-stamp`
+  const backupRaw = '{"useMica":false}'
+  const currentRaw = 'not valid json {{{'
+  const fs = memFs({ [settings]: currentRaw, [backup]: backupRaw })
+  const out = await R.surgicalRestoreFromBackup(settings, backup, fs, WIN_KEYS)
+  assert.equal(out.mode, 'bulk')
+  assert.equal(fs.files.get(settings), backupRaw)
+})
+
+test('surgicalRestoreFromBackup no-ops when window-keys already match backup', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const backup = `${settings}.wtw-backup-stamp`
+  const backupRaw = '{"useMica":false,"profiles":[{"name":"a"}]}'
+  // Current has same useMica as backup but a different non-window-key (user added).
+  const currentRaw = '{"useMica":false,"profiles":[{"name":"a"},{"name":"b"}]}'
+  const fs = memFs({ [settings]: currentRaw, [backup]: backupRaw })
+  const out = await R.surgicalRestoreFromBackup(settings, backup, fs, WIN_KEYS)
+  assert.equal(out.mode, 'surgical')
+  assert.equal(out.changed, false)
+  // Current must be unchanged
+  assert.equal(fs.files.get(settings), currentRaw)
+})
+
 test('cleanupBackupsFor isolates per-file unlink failures', async () => {
   const dir = '/wt'
   const settings = `${dir}/settings.json`

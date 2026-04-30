@@ -747,6 +747,54 @@ test('wt:applyStyle refreshes settings after profile-only fragment write', async
   assert.equal(await realFs.readFile(settingsPath, 'utf8'), settingsRaw)
 })
 
+test('wt:restoreBackup performs surgical revert: window keys reverted, user additions preserved', async (t) => {
+  const temp = await tmpdir()
+  t.after(() => realFs.rm(temp, { recursive: true, force: true }))
+  const origLocal = process.env.LOCALAPPDATA
+  t.after(() => {
+    if (origLocal === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = origLocal
+  })
+
+  const settingsDir = path.join(temp, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState')
+  await realFs.mkdir(settingsDir, { recursive: true })
+  const settingsPath = path.join(settingsDir, 'settings.json')
+  const backupPath = settingsPath + '.wtw-backup-2026-04-29T14-12-04-026Z'
+
+  // Backup: pre-Wrangler state.
+  await realFs.writeFile(backupPath, JSON.stringify({
+    useMica: false,
+    profiles: { list: [{ name: 'pwsh', guid: '{base-pwsh}' }] },
+  }, null, 2) + '\n', 'utf8')
+
+  // Current: Wrangler patched useMica + user added a scheme between patch and click.
+  await realFs.writeFile(settingsPath, JSON.stringify({
+    useMica: true,
+    profiles: { list: [{ name: 'pwsh', guid: '{base-pwsh}' }] },
+    schemes: [{ name: 'USER-NEW' }],
+  }, null, 2) + '\n', 'utf8')
+
+  process.env.LOCALAPPDATA = temp
+  const ipc = makeIpcStub()
+  ipcHandlers.register({
+    ipcMain: ipc, dialog: {}, shell: {}, fs: realFs, fsSync: realFsSync,
+    spawn: makeSpawnStub([]), store: makeMemoryStore(),
+    getMainWindow: () => null, env: { LOCALAPPDATA: temp },
+  })
+
+  const res = await ipc.invoke('wt:restoreBackup', backupPath)
+  assert.equal(res.ok, true)
+  assert.equal(res.mode, 'surgical')
+
+  const after = JSON.parse(await realFs.readFile(settingsPath, 'utf8'))
+  assert.equal(after.useMica, false, 'useMica reverted to backup value')
+  assert.deepEqual(after.schemes, [{ name: 'USER-NEW' }], 'user-added scheme survives restore')
+
+  // Backup files should be cleaned up.
+  const dirEntries = await realFs.readdir(settingsDir)
+  assert.equal(dirEntries.some(n => n.includes('.wtw-backup-')), false)
+})
+
 test('wt:applyStyle catches errors and returns {error}', async () => {
   const ipc = makeIpcStub()
   // Force fragmentDir failure: env without LOCALAPPDATA + a layout that triggers profile fragment write.

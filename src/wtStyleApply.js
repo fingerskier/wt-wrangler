@@ -128,6 +128,19 @@ function buildFragment(layout, settings, discriminator) {
   return { fragment: { profiles }, mapping }
 }
 
+function computeWindowKeyDelta(originalSettings, style) {
+  const sub = styleWindowSubset(style)
+  const out = {}
+  for (const k of Object.keys(sub)) {
+    const had = originalSettings && typeof originalSettings === 'object' &&
+      Object.prototype.hasOwnProperty.call(originalSettings, k)
+    out[k] = had
+      ? { had: true, original: originalSettings[k], patched: sub[k] }
+      : { had: false, patched: sub[k] }
+  }
+  return out
+}
+
 function applyWindowStyleToSettings(settings, style) {
   const sub = styleWindowSubset(style)
   if (!Object.keys(sub).length) return { settings, changed: false }
@@ -169,5 +182,6 @@ module.exports = {
   buildTransientProfile,
   buildFragment,
   applyWindowStyleToSettings,
+  computeWindowKeyDelta,
   remapLayoutProfiles,
 }

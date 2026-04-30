@@ -106,7 +106,8 @@ function register(deps) {
           // restoreAll can detect external edits and skip overwriting them.
           const patched = JSON.stringify(nextSettings, null, 4) + '\n'
           if (settingsRaw !== null && styleSession) {
-            styleSession.recordSnapshot(settingsPath, settingsRaw, patched)
+            const keyDelta = styleApply.computeWindowKeyDelta(settings, style)
+            styleSession.recordSnapshot(settingsPath, settingsRaw, patched, keyDelta)
           }
           await writeFileAtomic(fs, settingsPath, patched)
           settingsWritten = true
@@ -410,10 +411,11 @@ function register(deps) {
     const settingsPath = findExistingSettingsPath()
     if (!settingsPath) throw new Error('WT settings.json not found')
     if (!backupPath || typeof backupPath !== 'string') throw new Error('backupPath required')
-    await startupRestore.restoreFromBackup(settingsPath, backupPath, fs)
-    // After restore, settings.json matches the backup we just used. Drop ALL
-    // wtw-backup-* siblings so we don't re-prompt on the next launch — they
-    // are now stale relative to the freshly-restored state.
+    // Surgical: revert only the window-level keys Wrangler patches. Anything
+    // the user added between the patch and this click (color schemes, new
+    // profiles, fresh top-level keys) survives.
+    const out = await startupRestore.surgicalRestoreFromBackup(settingsPath, backupPath, fs, styleApply.WINDOW_KEYS)
+    // Drop ALL wtw-backup-* siblings so we don't re-prompt next launch.
     const remaining = await startupRestore.findBackups(settingsPath, fs)
     await startupRestore.discardAll(remaining.map(b => b.path), fs)
     // Forget any in-memory snapshot for this path so quit-time restoreAll
@@ -421,7 +423,7 @@ function register(deps) {
     if (styleSession && typeof styleSession.forget === 'function') {
       styleSession.forget(settingsPath)
     }
-    return { ok: true, settingsPath }
+    return { ok: true, settingsPath, mode: out && out.mode }
   })
 
   ipcMain.handle('wt:discardBackups', async () => {

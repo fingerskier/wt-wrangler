@@ -185,3 +185,137 @@ test('mixed: one path with patched (skipped) + one without (restored) — indepe
   assert.equal(res.skipped.length, 1)
   assert.equal(res.skipped[0].path, '/with-patched')
 })
+
+// --- Tier-2: per-key surgical restore ---------------------------------------
+
+test('recordSnapshot 4-arg stores keyDelta retrievable via getKeyDelta', () => {
+  const s = S.makeSession()
+  const delta = { useMica: { had: true, original: false, patched: true } }
+  s.recordSnapshot('/x', 'ORIG', 'PATCHED', delta)
+  assert.deepEqual(s.getKeyDelta('/x'), delta)
+})
+
+test('getKeyDelta returns undefined when not recorded', () => {
+  const s = S.makeSession()
+  s.recordSnapshot('/x', 'ORIG', 'PATCHED')
+  assert.equal(s.getKeyDelta('/x'), undefined)
+})
+
+test('restoreAll fast-path: current === patched → write originalRaw (preserves comments)', async () => {
+  const s = S.makeSession()
+  const orig = '{\n  // user comment\n  "useMica": false\n}\n'
+  const patched = '{\n    "useMica": true\n}\n'
+  s.recordSnapshot('/x', orig, patched, { useMica: { had: true, original: false, patched: true } })
+  const writes = []
+  const fakeFs = {
+    readFile: async () => patched,
+    writeFile: async (p, c) => { writes.push({ p, c }) },
+  }
+  const res = await S.restoreAll(s, fakeFs)
+  assert.deepEqual(writes, [{ p: '/x', c: orig }])
+  assert.deepEqual(res.restored, ['/x'])
+  assert.deepEqual(res.skipped, [])
+})
+
+test('restoreAll surgical: WT rewrote settings.json, our keys still equal patched → revert surgically', async () => {
+  const s = S.makeSession()
+  const orig = '{"useMica":false,"profiles":[]}\n'
+  const patched = '{\n    "useMica": true,\n    "profiles": []\n}\n'
+  // WT-rewritten: different formatting, added a default key the user didn't have, but our useMica still equals patched
+  const current = '{"profiles":[],"useMica":true,"copyOnSelect":false}'
+  const delta = { useMica: { had: true, original: false, patched: true } }
+  s.recordSnapshot('/x', orig, patched, delta)
+  const writes = []
+  const fakeFs = {
+    readFile: async () => current,
+    writeFile: async (p, c) => { writes.push({ p, c }) },
+  }
+  const res = await S.restoreAll(s, fakeFs)
+  assert.equal(writes.length, 1)
+  const written = JSON.parse(writes[0].c)
+  // Our patched key reverted to original
+  assert.equal(written.useMica, false)
+  // WT's added key preserved
+  assert.equal(written.copyOnSelect, false)
+  assert.deepEqual(res.restored, ['/x'])
+  assert.deepEqual(res.skipped, [])
+})
+
+test('restoreAll surgical: had:false → key gets DELETED, not set to undefined', async () => {
+  const s = S.makeSession()
+  const orig = '{}'
+  const patched = '{\n    "useMica": true\n}\n'
+  const current = '{"useMica":true,"otherKey":42}'
+  const delta = { useMica: { had: false, patched: true } }
+  s.recordSnapshot('/x', orig, patched, delta)
+  const writes = []
+  const fakeFs = {
+    readFile: async () => current,
+    writeFile: async (p, c) => { writes.push({ p, c }) },
+  }
+  await S.restoreAll(s, fakeFs)
+  const written = JSON.parse(writes[0].c)
+  assert.equal('useMica' in written, false, 'useMica should be removed entirely')
+  assert.equal(written.otherKey, 42)
+})
+
+test('restoreAll surgical: partial — revert ours, leave theirs, both populated', async () => {
+  const s = S.makeSession()
+  const orig = '{"useMica":false,"showTabsInTitlebar":true}'
+  const patched = '{\n    "useMica": true,\n    "showTabsInTitlebar": false\n}\n'
+  // User toggled useMica back to false via WT GUI; showTabsInTitlebar still equals our patch
+  const current = '{"useMica":false,"showTabsInTitlebar":false}'
+  const delta = {
+    useMica: { had: true, original: false, patched: true },
+    showTabsInTitlebar: { had: true, original: true, patched: false },
+  }
+  s.recordSnapshot('/x', orig, patched, delta)
+  const writes = []
+  const fakeFs = {
+    readFile: async () => current,
+    writeFile: async (p, c) => { writes.push({ p, c }) },
+  }
+  const res = await S.restoreAll(s, fakeFs)
+  const written = JSON.parse(writes[0].c)
+  assert.equal(written.useMica, false, 'user value preserved')
+  assert.equal(written.showTabsInTitlebar, true, 'our key reverted to original')
+  assert.deepEqual(res.restored, ['/x'])
+  assert.equal(res.skipped.length, 1)
+  assert.match(res.skipped[0].reason, /useMica/)
+})
+
+test('restoreAll surgical: all our keys externally modified → no write, skip', async () => {
+  const s = S.makeSession()
+  const orig = '{"useMica":false}'
+  const patched = '{\n    "useMica": true\n}\n'
+  const current = '{"useMica":"weird-user-value"}'
+  const delta = { useMica: { had: true, original: false, patched: true } }
+  s.recordSnapshot('/x', orig, patched, delta)
+  let writeCalled = false
+  const fakeFs = {
+    readFile: async () => current,
+    writeFile: async () => { writeCalled = true },
+  }
+  const res = await S.restoreAll(s, fakeFs)
+  assert.equal(writeCalled, false)
+  assert.deepEqual(res.restored, [])
+  assert.equal(res.skipped.length, 1)
+  assert.deepEqual(s.pending(), [])
+})
+
+test('restoreAll surgical: unparseable current JSON → skip, forget', async () => {
+  const s = S.makeSession()
+  const delta = { useMica: { had: true, original: false, patched: true } }
+  s.recordSnapshot('/x', '{}', '{\n    "useMica": true\n}\n', delta)
+  let writeCalled = false
+  const fakeFs = {
+    readFile: async () => 'not valid json {{{',
+    writeFile: async () => { writeCalled = true },
+  }
+  const res = await S.restoreAll(s, fakeFs)
+  assert.equal(writeCalled, false)
+  assert.deepEqual(res.restored, [])
+  assert.equal(res.skipped.length, 1)
+  assert.match(res.skipped[0].reason, /unparseable|parse/i)
+  assert.deepEqual(s.pending(), [])
+})

@@ -7,6 +7,7 @@
 // IO is injected (fs from node:fs/promises) so the module is unit-testable.
 
 const path = require('node:path')
+const { parseJsonc } = require('./wtProfiles')
 
 const BACKUP_RE = /\.wtw-backup-(.+)$/
 
@@ -65,6 +66,51 @@ async function discardAll(backupPaths, fs) {
   return { errors }
 }
 
+// Surgically restore only the window-level keys Wrangler patches (e.g.
+// useMica) by computing the delta between the backup and current settings.json
+// at click time. Preserves anything the user added between Wrangler's patch
+// and the popup click (color schemes, new profiles, fresh top-level keys).
+//
+// Falls back to a bulk write of the backup when either side fails to parse —
+// matches legacy behavior so a corrupted state still restores something.
+async function surgicalRestoreFromBackup(settingsPath, backupPath, fs, windowKeys) {
+  if (!settingsPath || !backupPath) throw new Error('settingsPath and backupPath required')
+  const backupRaw = await fs.readFile(backupPath, 'utf8')
+  let currentRaw = ''
+  try { currentRaw = await fs.readFile(settingsPath, 'utf8') } catch (_) { currentRaw = '' }
+  let backupParsed, currentParsed
+  try {
+    backupParsed = parseJsonc(backupRaw)
+    currentParsed = parseJsonc(currentRaw)
+  } catch (_) {
+    await fs.writeFile(settingsPath, backupRaw, 'utf8')
+    return { mode: 'bulk' }
+  }
+  if (!backupParsed || typeof backupParsed !== 'object' || Array.isArray(backupParsed) ||
+      !currentParsed || typeof currentParsed !== 'object' || Array.isArray(currentParsed)) {
+    await fs.writeFile(settingsPath, backupRaw, 'utf8')
+    return { mode: 'bulk' }
+  }
+  const keys = Array.isArray(windowKeys) ? windowKeys : []
+  let changed = false
+  for (const k of keys) {
+    const backupHad = Object.prototype.hasOwnProperty.call(backupParsed, k)
+    const currentHas = Object.prototype.hasOwnProperty.call(currentParsed, k)
+    if (backupHad && currentHas && backupParsed[k] === currentParsed[k]) continue
+    if (backupHad) {
+      currentParsed[k] = backupParsed[k]
+      changed = true
+    } else if (currentHas) {
+      delete currentParsed[k]
+      changed = true
+    }
+  }
+  if (changed) {
+    await fs.writeFile(settingsPath, JSON.stringify(currentParsed, null, 4) + '\n', 'utf8')
+  }
+  return { mode: 'surgical', changed }
+}
+
 // Discard every `.wtw-backup-<stamp>` sibling next to settingsPath. Used by the
 // quit-time flow after a successful in-memory restoreAll so disk backups don't
 // linger as orphans that re-trigger the startup restore prompt next launch.
@@ -75,4 +121,4 @@ async function cleanupBackupsFor(settingsPath, fs) {
   return { discarded: backups.length - out.errors.length, errors: out.errors }
 }
 
-module.exports = { findBackups, restoreFromBackup, discardBackup, discardAll, parseBackupStamp, cleanupBackupsFor }
+module.exports = { findBackups, restoreFromBackup, surgicalRestoreFromBackup, discardBackup, discardAll, parseBackupStamp, cleanupBackupsFor }
