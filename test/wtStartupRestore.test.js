@@ -127,3 +127,42 @@ test('parseBackupStamp returns the timestamp tail or null', () => {
   assert.equal(R.parseBackupStamp('settings.json.bak', 'settings.json'), null)
   assert.equal(R.parseBackupStamp('other.wtw-backup-x', 'settings.json'), null)
 })
+
+test('cleanupBackupsFor removes every .wtw-backup sibling and reports count', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const a = `${settings}.wtw-backup-2026-04-26T10-00-00-000Z`
+  const b = `${settings}.wtw-backup-2026-04-27T17-01-30-977Z`
+  const fs = memFs({ [settings]: '{}', [a]: 'A', [b]: 'B' })
+  const out = await R.cleanupBackupsFor(settings, fs)
+  assert.equal(out.discarded, 2)
+  assert.deepEqual(out.errors, [])
+  assert.equal(fs.files.has(a), false)
+  assert.equal(fs.files.has(b), false)
+  assert.equal(fs.files.has(settings), true)
+})
+
+test('cleanupBackupsFor no-ops when no backups exist', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const fs = memFs({ [settings]: '{}' })
+  const out = await R.cleanupBackupsFor(settings, fs)
+  assert.equal(out.discarded, 0)
+  assert.deepEqual(out.errors, [])
+})
+
+test('cleanupBackupsFor isolates per-file unlink failures', async () => {
+  const dir = '/wt'
+  const settings = `${dir}/settings.json`
+  const a = `${settings}.wtw-backup-2026-04-26T10-00-00-000Z`
+  const b = `${settings}.wtw-backup-2026-04-27T17-01-30-977Z`
+  const fs = memFs({ [settings]: '{}', [a]: 'A', [b]: 'B' })
+  const orig = fs.unlink.bind(fs)
+  fs.unlink = async (p) => { if (p === b) throw new Error('boom'); return orig(p) }
+  const out = await R.cleanupBackupsFor(settings, fs)
+  assert.equal(out.discarded, 1)
+  assert.equal(out.errors.length, 1)
+  assert.equal(out.errors[0].path, b)
+  assert.equal(fs.files.has(a), false)
+  assert.equal(fs.files.has(b), true)
+})

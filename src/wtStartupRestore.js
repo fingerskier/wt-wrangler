@@ -65,4 +65,14 @@ async function discardAll(backupPaths, fs) {
   return { errors }
 }
 
-module.exports = { findBackups, restoreFromBackup, discardBackup, discardAll, parseBackupStamp }
+// Discard every `.wtw-backup-<stamp>` sibling next to settingsPath. Used by the
+// quit-time flow after a successful in-memory restoreAll so disk backups don't
+// linger as orphans that re-trigger the startup restore prompt next launch.
+async function cleanupBackupsFor(settingsPath, fs) {
+  const backups = await findBackups(settingsPath, fs)
+  if (!backups.length) return { discarded: 0, errors: [] }
+  const out = await discardAll(backups.map(b => b.path), fs)
+  return { discarded: backups.length - out.errors.length, errors: out.errors }
+}
+
+module.exports = { findBackups, restoreFromBackup, discardBackup, discardAll, parseBackupStamp, cleanupBackupsFor }

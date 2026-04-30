@@ -12,6 +12,7 @@ const fsSync = require('node:fs')
 const { spawn } = require('node:child_process')
 const { makeStore } = require('./src/config')
 const { makeSession, restoreAll } = require('./src/wtStyleSession')
+const startupRestore = require('./src/wtStartupRestore')
 const updater = require('./src/updater')
 const ipcHandlers = require('./src/ipcHandlers')
 
@@ -87,7 +88,14 @@ app.on('will-quit', async (event) => {
   willQuitInProgress = true
   event.preventDefault()
   try {
-    await restoreAll(styleSession, fs)
+    const result = await restoreAll(styleSession, fs)
+    // After successful in-memory restore, delete the on-disk `.wtw-backup-*`
+    // sibling so it doesn't trigger the startup restore prompt on next launch.
+    // Skipped/errored paths are intentionally left alone — the popup is the
+    // recovery path for those.
+    for (const p of (result && result.restored) || []) {
+      try { await startupRestore.cleanupBackupsFor(p, fs) } catch (_) {}
+    }
   } catch (_) {
     // restoreAll captures per-path errors; this catch is paranoia.
   }
