@@ -95,3 +95,34 @@ test('staleFragmentFiles only sweeps .json files (ignores tmp/lock/index)', () =
   const stale = F.staleFragmentFiles(entries, new Set(), now, 30 * 86_400_000)
   assert.deepEqual(stale, ['old.json'])
 })
+
+test('hasDuplicateProfileGuids: false on unique guids', () => {
+  const frag = { profiles: [
+    { guid: '{aaa}', name: 'a' },
+    { guid: '{bbb}', name: 'b' },
+  ] }
+  assert.equal(F.hasDuplicateProfileGuids(frag), false)
+})
+
+test('hasDuplicateProfileGuids: true when two profiles share a guid', () => {
+  const frag = { profiles: [
+    { guid: '{aaa}', name: 'a' },
+    { guid: '{aaa}', name: 'a' },
+  ] }
+  assert.equal(F.hasDuplicateProfileGuids(frag), true)
+})
+
+test('hasDuplicateProfileGuids: case-insensitive guid comparison', () => {
+  const frag = { profiles: [
+    { guid: '{ABC123}' },
+    { guid: '{abc123}' },
+  ] }
+  assert.equal(F.hasDuplicateProfileGuids(frag), true)
+})
+
+test('hasDuplicateProfileGuids: tolerates missing/non-string guids and empty', () => {
+  assert.equal(F.hasDuplicateProfileGuids(null), false)
+  assert.equal(F.hasDuplicateProfileGuids({}), false)
+  assert.equal(F.hasDuplicateProfileGuids({ profiles: [] }), false)
+  assert.equal(F.hasDuplicateProfileGuids({ profiles: [{}, { guid: '' }] }), false)
+})

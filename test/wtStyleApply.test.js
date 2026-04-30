@@ -218,6 +218,33 @@ test('remapLayoutProfiles substitutes (default) panes too', () => {
   assert.equal(next.tabs[0].panes[1].profile, 'wtw-w-pwsh')
 })
 
+test('buildFragment dedupes when (default) resolves to a profile already used explicitly', () => {
+  // Layout has both an explicit "Command Prompt" pane AND a (default) pane,
+  // and WT's defaultProfile IS Command Prompt — must NOT emit two transients
+  // with the same name/guid (causes WT "duplicate GUID" startup error).
+  const settings = {
+    defaultProfile: '{base-cmd}',
+    profiles: { list: [
+      { name: 'Command Prompt', guid: '{base-cmd}', commandline: 'cmd.exe' },
+    ] },
+  }
+  const layout = {
+    window: 'Claude_Plugins',
+    windowStyle: { background: '#ff7b00' },
+    tabs: [
+      { panes: [{ profile: 'Command Prompt' }] },
+      { panes: [{ profile: '' }] },
+    ],
+  }
+  const { fragment, mapping } = A.buildFragment(layout, settings)
+  assert.equal(fragment.profiles.length, 1, 'one transient per resolved base profile')
+  const t = fragment.profiles[0]
+  assert.equal(t.name, 'wtw-Claude_Plugins-Command_Prompt')
+  // Both keys map to the same transient name so remap works for either pane.
+  assert.equal(mapping['Command Prompt'], 'wtw-Claude_Plugins-Command_Prompt')
+  assert.equal(mapping['(default)'], 'wtw-Claude_Plugins-Command_Prompt')
+})
+
 // --- computeWindowKeyDelta -------------------------------------------------
 
 test('computeWindowKeyDelta records had:true with original value when key present', () => {

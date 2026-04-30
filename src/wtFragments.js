@@ -45,4 +45,18 @@ function staleFragmentFiles(entries, keepSet, now, maxAgeMs) {
   return out
 }
 
-module.exports = { styleHash, fragmentFileName, safeWindowName, staleFragmentFiles }
+function hasDuplicateProfileGuids(fragmentJson) {
+  if (!fragmentJson || typeof fragmentJson !== 'object') return false
+  const profiles = Array.isArray(fragmentJson.profiles) ? fragmentJson.profiles : []
+  const seen = new Set()
+  for (const p of profiles) {
+    if (!p || typeof p !== 'object') continue
+    const g = typeof p.guid === 'string' ? p.guid.trim().toLowerCase() : ''
+    if (!g) continue
+    if (seen.has(g)) return true
+    seen.add(g)
+  }
+  return false
+}
+
+module.exports = { styleHash, fragmentFileName, safeWindowName, staleFragmentFiles, hasDuplicateProfileGuids }

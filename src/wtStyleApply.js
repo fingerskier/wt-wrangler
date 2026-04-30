@@ -131,18 +131,30 @@ function buildFragment(layout, settings, discriminator) {
   if (!bases.length) return { fragment: null, mapping: {} }
   const profiles = []
   const mapping = {}
+  // Dedupe by the *resolved* base profile name so that when (default)
+  // resolves to a profile that's also referenced explicitly elsewhere
+  // (e.g. defaultProfile == "Command Prompt" + a pane that names it),
+  // we emit a single transient — same seed → same GUID would otherwise
+  // produce duplicates and trip WT's "duplicate GUID" startup error.
+  const byResolvedName = new Map()
   for (const baseKey of bases) {
-    let base, overrideName
+    let base, resolvedName
     if (baseKey === DEFAULT_BASE_KEY) {
       base = findDefaultProfile(settings)
-      overrideName = (base && typeof base.name === 'string' && base.name.trim()) || 'default'
+      resolvedName = (base && typeof base.name === 'string' && base.name.trim()) || 'default'
     } else {
       base = findProfileByName(settings, baseKey)
-      overrideName = baseKey
+      resolvedName = baseKey
     }
-    const transient = buildTransientProfile(base, winName, style, overrideName, discriminator)
+    const existing = byResolvedName.get(resolvedName)
+    if (existing) {
+      mapping[baseKey] = existing
+      continue
+    }
+    const transient = buildTransientProfile(base, winName, style, resolvedName, discriminator)
     profiles.push(transient)
     mapping[baseKey] = transient.name
+    byResolvedName.set(resolvedName, transient.name)
   }
   return { fragment: { profiles }, mapping }
 }

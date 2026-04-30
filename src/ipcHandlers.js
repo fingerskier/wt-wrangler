@@ -7,7 +7,7 @@ const styleApply = require('./wtStyleApply')
 const startupRestore = require('./wtStartupRestore')
 const { listEntries, moveLayoutFile, saveLayoutFile, saveNewLayoutFile } = require('./layouts')
 const { validateLayout } = require('./layoutSchema')
-const { fragmentFileName, styleHash, staleFragmentFiles } = require('./wtFragments')
+const { fragmentFileName, styleHash, staleFragmentFiles, hasDuplicateProfileGuids } = require('./wtFragments')
 const { classifyGitError } = require('./ghUpdate')
 const { writeFileAtomic } = require('./atomicWrite')
 const { runGit: runGitPure } = require('./gitRun')
@@ -144,6 +144,7 @@ function register(deps) {
       } catch (_) {}
     }
     const stale = staleFragmentFiles(entries, new Set(), Date.now(), FRAGMENT_MAX_AGE_MS)
+    const staleSet = new Set(stale)
     const swept = []
     const errors = []
     for (const name of stale) {
@@ -152,6 +153,26 @@ function register(deps) {
         swept.push(name)
       } catch (err) {
         errors.push({ name, error: err.message || String(err) })
+      }
+    }
+    // Self-heal: drop any fragment that contains internal duplicate profile
+    // GUIDs. Such files are artifacts of a prior bug where (default) and an
+    // explicit profile pointing to the same base each emitted a transient,
+    // and WT refuses to start cleanly until they're removed.
+    for (const e of entries) {
+      if (!e.name.endsWith('.json') || staleSet.has(e.name)) continue
+      const full = path.join(dir, e.name)
+      let parsed
+      try {
+        const raw = await fs.readFile(full, 'utf8')
+        parsed = JSON.parse(raw)
+      } catch (_) { continue }
+      if (!hasDuplicateProfileGuids(parsed)) continue
+      try {
+        await fs.unlink(full)
+        swept.push(e.name)
+      } catch (err) {
+        errors.push({ name: e.name, error: err.message || String(err) })
       }
     }
     return { swept, errors }
