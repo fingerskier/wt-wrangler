@@ -1,6 +1,13 @@
 'use strict'
 
 const { profileKind } = require('./wtCommand')
+const { findDefaultProfile } = require('./wtProfiles')
+
+// Sentinel used in mapping/keys for panes that have no explicit profile
+// ("(default)" in the renderer = empty string). Resolves at fragment-build
+// time to the actual default profile from settings.json so background colors
+// also apply to default-profile panes.
+const DEFAULT_BASE_KEY = '(default)'
 
 const PROFILE_KEYS = [
   'background',
@@ -83,6 +90,11 @@ function findProfileByName(settings, name) {
   return null
 }
 
+function paneBaseKey(pane) {
+  const raw = (pane && typeof pane.profile === 'string') ? pane.profile.trim() : ''
+  return raw || DEFAULT_BASE_KEY
+}
+
 function uniqueBaseProfiles(layout) {
   const out = []
   const seen = new Set()
@@ -90,8 +102,8 @@ function uniqueBaseProfiles(layout) {
   for (const tab of layout.tabs) {
     const panes = Array.isArray(tab.panes) ? tab.panes : []
     for (const p of panes) {
-      const name = (p && typeof p.profile === 'string') ? p.profile.trim() : ''
-      if (name && !seen.has(name)) { seen.add(name); out.push(name) }
+      const key = paneBaseKey(p)
+      if (!seen.has(key)) { seen.add(key); out.push(key) }
     }
   }
   return out
@@ -119,11 +131,18 @@ function buildFragment(layout, settings, discriminator) {
   if (!bases.length) return { fragment: null, mapping: {} }
   const profiles = []
   const mapping = {}
-  for (const baseName of bases) {
-    const base = findProfileByName(settings, baseName)
-    const transient = buildTransientProfile(base, winName, style, baseName, discriminator)
+  for (const baseKey of bases) {
+    let base, overrideName
+    if (baseKey === DEFAULT_BASE_KEY) {
+      base = findDefaultProfile(settings)
+      overrideName = (base && typeof base.name === 'string' && base.name.trim()) || 'default'
+    } else {
+      base = findProfileByName(settings, baseKey)
+      overrideName = baseKey
+    }
+    const transient = buildTransientProfile(base, winName, style, overrideName, discriminator)
     profiles.push(transient)
-    mapping[baseName] = transient.name
+    mapping[baseKey] = transient.name
   }
   return { fragment: { profiles }, mapping }
 }
@@ -159,10 +178,12 @@ function remapLayoutProfiles(layout, mapping) {
   for (const tab of next.tabs) {
     const panes = Array.isArray(tab.panes) ? tab.panes : []
     for (const p of panes) {
-      if (p && typeof p.profile === 'string' && mapping[p.profile]) {
-        if (!p.shellKind) p.shellKind = profileKind(p.profile)
-        p.profile = mapping[p.profile]
-      }
+      if (!p || typeof p !== 'object') continue
+      const raw = typeof p.profile === 'string' ? p.profile.trim() : ''
+      const key = raw || DEFAULT_BASE_KEY
+      if (!mapping[key]) continue
+      if (!p.shellKind) p.shellKind = profileKind(raw)
+      p.profile = mapping[key]
     }
   }
   return next
@@ -171,10 +192,12 @@ function remapLayoutProfiles(layout, mapping) {
 module.exports = {
   PROFILE_KEYS,
   WINDOW_KEYS,
+  DEFAULT_BASE_KEY,
   styleProfileSubset,
   styleWindowSubset,
   hasProfileStyle,
   hasWindowStyle,
+  paneBaseKey,
   uniqueBaseProfiles,
   findProfileByName,
   transientName,

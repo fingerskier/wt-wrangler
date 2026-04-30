@@ -156,6 +156,68 @@ test('remapLayoutProfiles stashes original shellKind so shell wrapper survives r
   assert.equal(next.tabs[0].panes[0].shellKind, 'cmd')
 })
 
+// --- (default) profile handling -------------------------------------------
+
+const settingsWithDefault = {
+  defaultProfile: '{base-pwsh}',
+  profiles: {
+    list: [
+      { name: 'pwsh', guid: '{base-pwsh}', commandline: 'powershell.exe' },
+      { name: 'cmd',  guid: '{base-cmd}',  commandline: 'cmd.exe' },
+    ],
+  },
+}
+
+test('uniqueBaseProfiles surfaces (default) sentinel for empty/missing pane.profile', () => {
+  const layout = {
+    tabs: [
+      { panes: [{ profile: '' }, { profile: 'pwsh' }, {}] },
+    ],
+  }
+  const out = A.uniqueBaseProfiles(layout)
+  assert.deepEqual(out, ['(default)', 'pwsh'])
+})
+
+test('buildFragment resolves (default) sentinel via settings.defaultProfile', () => {
+  const layout = {
+    window: 'devwin',
+    windowStyle: { background: '#abcdef' },
+    tabs: [{ panes: [{ profile: '' }] }],
+  }
+  const { fragment, mapping } = A.buildFragment(layout, settingsWithDefault)
+  assert.ok(fragment)
+  assert.equal(fragment.profiles.length, 1)
+  const t = fragment.profiles[0]
+  // resolves to the actual default profile (pwsh); transient name uses real base name
+  assert.equal(t.name, 'wtw-devwin-pwsh')
+  assert.equal(t.commandline, 'powershell.exe')
+  assert.equal(t.background, '#abcdef')
+  assert.equal(t.hidden, true)
+  assert.equal(mapping['(default)'], 'wtw-devwin-pwsh')
+})
+
+test('buildFragment falls back to "default" name when settings.defaultProfile is unresolvable', () => {
+  const layout = {
+    window: 'w',
+    windowStyle: { background: '#000' },
+    tabs: [{ panes: [{ profile: '' }] }],
+  }
+  const { fragment, mapping } = A.buildFragment(layout, { profiles: { list: [] } })
+  assert.ok(fragment)
+  assert.equal(fragment.profiles[0].name, 'wtw-w-default')
+  assert.equal(mapping['(default)'], 'wtw-w-default')
+})
+
+test('remapLayoutProfiles substitutes (default) panes too', () => {
+  const layout = {
+    tabs: [{ panes: [{ profile: '' }, { profile: 'pwsh' }] }],
+  }
+  const mapping = { '(default)': 'wtw-w-pwsh', pwsh: 'wtw-w-pwsh' }
+  const next = A.remapLayoutProfiles(layout, mapping)
+  assert.equal(next.tabs[0].panes[0].profile, 'wtw-w-pwsh')
+  assert.equal(next.tabs[0].panes[1].profile, 'wtw-w-pwsh')
+})
+
 // --- computeWindowKeyDelta -------------------------------------------------
 
 test('computeWindowKeyDelta records had:true with original value when key present', () => {
